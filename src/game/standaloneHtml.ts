@@ -1,111 +1,168 @@
 /**
- * Complete, self-contained single-file HTML5 + CSS + JavaScript source code for
- * "Klasik - Garden Garage Cafe" (Mobile-Responsive, Architectural & QoL Overhaul Edition).
+ * Complete, self-contained single-file HTML, CSS, and JavaScript implementation of
+ * "Klasik — Garden Garage Cafe" (GBA Pixel-Art Multi-Map, Day/Night & Weather Edition).
  */
 export const STANDALONE_KLASIK_HTML = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Klasik — Garden Garage Cafe (GBA Edition)</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet" />
+  <title>Klasik — Garden Garage Cafe ★ (GBA Pixel Edition)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
   <style>
-    /* ==========================================================================
-       KLASIK: GARDEN GARAGE CAFE — 100DVH MOBILE-RESPONSIVE GBA ARCADE FRAME
-       ========================================================================== */
-    * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; -webkit-tap-highlight-color: transparent; }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+      image-rendering: pixelated;
+    }
+
     html, body {
-      background: #0b0d12;
-      color: #f8fafc;
-      font-family: 'VT323', monospace;
       width: 100vw;
       height: 100dvh;
       overflow: hidden;
+      background-color: #0b0d12;
+      color: #f8fafc;
+      font-family: 'VT323', monospace;
+    }
+
+    #arcade-shell {
+      width: 100vw;
+      height: 100dvh;
       display: flex;
       flex-direction: column;
       justify-content: space-between;
-      image-rendering: pixelated;
+      background: #0b0d12;
+      overflow: hidden;
     }
-    .gba-top-bar {
+
+    .gba-frame {
+      background-color: #181c26;
+      border: 3px solid #f8fafc;
+      box-shadow:
+        inset 0 0 0 2px #090b0e,
+        0 3px 0 0 #090b0e;
+    }
+
+    .gba-dialogue-box {
+      background-color: #f8fafc;
+      color: #0f172a;
+      border: 3px solid #090b0e;
+      box-shadow:
+        inset 0 0 0 2px #475569,
+        0 3px 0 0 #090b0e;
+    }
+
+    .gba-btn {
+      font-family: 'Press Start 2P', monospace;
+      background-color: #1e2433;
+      color: #f8fafc;
+      border: 2px solid #f8fafc;
+      box-shadow:
+        inset -2px -2px 0px #090b0e,
+        inset 2px 2px 0px #475569,
+        0 2px 0 0 #090b0e;
+      cursor: pointer;
+      transition: transform 60ms steps(2);
+    }
+
+    .gba-btn:hover {
+      background-color: #2e364d;
+      border-color: #facc15;
+    }
+
+    .gba-btn:active {
+      transform: translateY(2px);
+    }
+
+    .gba-btn-active {
+      background-color: #14532d !important;
+      border-color: #86efac !important;
+      color: #fef08a !important;
+    }
+
+    .gba-keycap {
+      font-family: 'Press Start 2P', monospace;
+      font-size: 7px;
+      padding: 2px 4px;
+      background-color: #090b0e;
+      color: #facc15;
+      border: 1px solid #64748b;
+      display: inline-block;
+    }
+
+    /* External Top GBA HUD Bar (Wraps cleanly, Zero Horizontal Scrollbars!) */
+    #top-hud {
+      width: 100%;
       background: #0b0d12;
       border-bottom: 3px solid #f8fafc;
-      padding: 6px 10px;
+      padding: 4px 8px;
       display: flex;
-      flex-wrap: nowrap;
+      flex-wrap: wrap;
       align-items: center;
       justify-content: space-between;
-      gap: 8px;
+      gap: 6px;
       flex-shrink: 0;
-      overflow-x: auto;
+      overflow-x: hidden;
     }
-    .gba-top-bar::-webkit-scrollbar { display: none; }
-    .gba-frame {
-      background: #161920;
-      border: 2px solid #f8fafc;
-      box-shadow: inset 0 0 0 2px #333947, 0 3px 0 #050608;
-      padding: 4px 10px;
+
+    .stat-strip {
       display: flex;
+      flex-wrap: wrap;
       align-items: center;
       gap: 10px;
+      padding: 4px 8px;
       flex-shrink: 0;
     }
-    .stat-pill {
+
+    .stat-item {
       display: flex;
       align-items: center;
       gap: 5px;
-      font-family: 'Press Start 2P', monospace;
-      font-size: 10px;
-      white-space: nowrap;
     }
-    .stat-kicker { font-size: 8px; color: #94a3b8; }
-    .sep { width: 2px; height: 16px; background: #334155; }
 
-    .gba-dialogue {
-      background: #f8fafc;
-      color: #090b0e;
-      border: 2px solid #090b0e;
-      box-shadow: inset 0 0 0 2px #cbd5e1, 0 3px 0 #050608;
-      padding: 4px 10px;
+    .stat-label {
+      font-family: 'Press Start 2P', monospace;
+      font-size: 8px;
+      color: #94a3b8;
+    }
+
+    .stat-val {
+      font-family: 'Press Start 2P', monospace;
+      font-size: 12px;
+      color: #f8fafc;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .divider {
+      width: 2px;
+      height: 16px;
+      background: #334155;
+    }
+
+    #order-banner {
       flex: 1;
-      min-width: 200px;
-      max-width: 520px;
+      min-width: 190px;
+      max-width: 440px;
+      padding: 3px 10px;
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 8px;
-      overflow: hidden;
     }
-    @media (max-width: 860px) {
-      .gba-dialogue { display: none; }
-    }
-    .dialogue-title {
-      font-family: 'Press Start 2P', monospace;
-      font-size: 8px;
-      color: #0f172a;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .dialogue-text {
-      font-family: 'VT323', monospace;
-      font-size: 17px;
-      line-height: 1.05;
-      color: #1e293b;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .arrow-bounce {
-      font-family: 'Press Start 2P', monospace;
-      font-size: 10px;
-      color: #ef4444;
-      animation: bob 0.5s steps(2) infinite;
-    }
-    @keyframes bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(3px); } }
 
-    .viewport-stage {
+    @media (max-width: 1100px) {
+      #order-banner {
+        display: none;
+      }
+    }
+
+    /* Center GBA Viewport Stage */
+    #canvas-stage {
       position: relative;
       flex: 1;
       min-height: 0;
@@ -113,772 +170,798 @@ export const STANDALONE_KLASIK_HTML = `<!DOCTYPE html>
       display: flex;
       align-items: center;
       justify-content: center;
-      background: #0b0d12;
       padding: 4px;
+      background: #0b0d12;
     }
+
     canvas {
       width: 100%;
       height: 100%;
       object-fit: contain;
-      image-rendering: pixelated;
-      cursor: pointer;
       border: 3px solid #334155;
+      cursor: pointer;
+      image-rendering: pixelated;
     }
-    .floating-quick-bar {
+
+    /* Floating Touch-Friendly Quick-Action Bar on Canvas Corner */
+    #floating-quickbar {
       position: absolute;
       bottom: 10px;
       right: 12px;
+      z-index: 10;
       display: flex;
       flex-wrap: wrap;
       justify-content: flex-end;
       gap: 6px;
-      z-index: 10;
       pointer-events: auto;
     }
-    .gba-bottom-dock {
+
+    .quick-btn {
+      padding: 6px 9px;
+      font-size: 9px;
+      white-space: nowrap;
+    }
+
+    /* Collapsible Bottom GBA Action Dock */
+    #bottom-dock {
+      width: 100%;
       background: #0b0d12;
       border-top: 3px solid #f8fafc;
-      padding: 6px 8px;
+      padding: 4px 6px;
       display: flex;
       flex-wrap: wrap;
       align-items: center;
       justify-content: center;
-      gap: 6px;
+      gap: 4px;
       flex-shrink: 0;
+      overflow-x: hidden;
     }
-    .gba-bottom-dock.collapsed { display: none; }
-    .gba-btn {
-      font-family: 'Press Start 2P', monospace;
-      background: #1e232d;
-      color: #f8fafc;
-      border: 2px solid #e2e8f0;
-      box-shadow: inset 0 -3px 0 #0f1218, 0 3px 0 #050608;
-      padding: 5px 8px;
-      font-size: 8px;
-      cursor: pointer;
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
+
+    #bottom-dock.collapsed {
+      display: none !important;
+    }
+
+    .dock-btn {
+      padding: 4px 7px;
       text-align: left;
+      flex-shrink: 0;
       white-space: nowrap;
     }
-    .gba-btn:hover { background: #2d3544; }
-    .gba-btn:active { transform: translateY(2px); }
-    .gba-btn.active {
-      background: #facc15;
-      color: #090b0e;
-      border-color: #ffffff;
-      box-shadow: inset 0 -3px 0 #ca8a04, 0 3px 0 #050608;
+
+    .dock-btn .top-row {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 8px;
     }
-    .keycap {
-      display: inline-block;
-      background: #090b0e;
-      color: #facc15;
-      border: 1px solid #94a3b8;
-      padding: 1px 4px;
-      font-size: 7px;
-      margin-right: 4px;
-    }
-    .btn-sub {
+
+    .dock-btn .sub-row {
       font-family: 'VT323', monospace;
       font-size: 14px;
-      opacity: 0.92;
+      line-height: 1;
+      margin-top: 2px;
+      opacity: 0.9;
+    }
+
+    /* Overlay Screens */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(9, 11, 16, 0.88);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      z-index: 50;
+    }
+
+    .modal-card {
+      max-width: 600px;
+      width: 100%;
+      padding: 22px;
+    }
+
+    .hidden {
+      display: none !important;
     }
   </style>
 </head>
-<body>
-  <!-- Compact Single-Row Top HUD Bar (Never wraps into multi-row blocks on mobile) -->
-  <header class="gba-top-bar">
-    <div class="gba-frame">
-      <div class="stat-pill"><span class="stat-kicker">COZY</span><span id="hud-cozy">82%</span></div>
-      <div class="sep"></div>
-      <div class="stat-pill" style="color:#fb7185"><span>♥</span><span id="hud-hearts">3</span></div>
-      <div class="sep"></div>
-      <div class="stat-pill"><span class="stat-kicker">SRV</span><span id="hud-served">0/6</span></div>
-      <div class="sep"></div>
-      <div class="stat-pill" style="color:#facc15"><span>$</span><span id="hud-coins">25</span></div>
-    </div>
-
-    <div class="gba-dialogue">
-      <div style="min-width:0">
-        <div class="dialogue-title" id="hud-order-title">FLORA: '90S MIATA MOCHA (STEP 0/3)</div>
-        <div class="dialogue-text" id="hud-msg">Tap ⚡ Smart Step or [1] Grinder → [2] Espresso → [Space] Pour Cup!</div>
+<body data-state="title">
+  <div id="arcade-shell">
+    <!-- External Top GBA Status HUD Bar -->
+    <header id="top-hud" class="hidden">
+      <div class="gba-frame stat-strip">
+        <div class="stat-item">
+          <span class="stat-label">COZY</span>
+          <span id="hud-cozy" class="stat-val">82%</span>
+        </div>
+        <div class="divider"></div>
+        <div class="stat-item">
+          <span class="stat-label" style="color:#fb7185">♥</span>
+          <span id="hud-hearts" class="stat-val" style="color:#fb7185">3</span>
+        </div>
+        <div class="divider"></div>
+        <div class="stat-item">
+          <span class="stat-label">SRV</span>
+          <span id="hud-served" class="stat-val">0/6</span>
+        </div>
+        <div class="divider"></div>
+        <div class="stat-item">
+          <span class="stat-label" style="color:#facc15">$</span>
+          <span id="hud-coins" class="stat-val" style="color:#facc15">25</span>
+        </div>
       </div>
-      <span class="arrow-bounce">▼</span>
+
+      <div id="order-banner" class="gba-dialogue-box">
+        <div style="min-width:0">
+          <div style="display:flex;align-items:center;gap:8px">
+            <span id="hud-order-title" style="font-family:'Press Start 2P',monospace;font-size:8px">FLORA: '90S MIATA MOCHA</span>
+            <span id="hud-step-badge" style="font-family:'Press Start 2P',monospace;font-size:8px;background:#0f172a;color:#facc15;padding:2px 5px">STEP 0/3</span>
+          </div>
+          <div id="hud-message" style="font-size:16px;color:#1e293b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px">
+            Tap ⚡ Smart Step or [1] Grinder → [2] Espresso → [Space] Cup!
+          </div>
+        </div>
+        <span style="font-family:'Press Start 2P',monospace;font-size:10px;color:#ef4444">▼</span>
+      </div>
+
+      <div class="gba-frame" style="padding:4px 6px;display:flex;flex-wrap:wrap;gap:5px;align-items:center;flex-shrink:0">
+        <button id="btn-room" class="gba-btn" style="padding:4px 7px;font-size:8px;color:#7dd3fc">🚪 INSIDE</button>
+        <button id="btn-time" class="gba-btn" style="padding:4px 7px;font-size:8px;color:#fde047">☀️ DAY</button>
+        <button id="btn-weather" class="gba-btn" style="padding:4px 7px;font-size:8px;color:#86efac">⛅ CLEAR</button>
+        <button id="btn-bgm" class="gba-btn" style="padding:4px 7px;font-size:8px">♪ BGM:OFF</button>
+        <button id="btn-mute" class="gba-btn" style="padding:4px 7px;font-size:8px">🔊 SFX:ON</button>
+        <button id="btn-dock" class="gba-btn" style="padding:4px 7px;font-size:8px;color:#facc15">▼ DOCK</button>
+        <button id="btn-pause" class="gba-btn" style="padding:4px 7px;font-size:8px">II</button>
+      </div>
+    </header>
+
+    <!-- Main GBA Pixel-Art Viewport Stage -->
+    <div id="canvas-stage">
+      <canvas id="game-canvas" width="900" height="480"></canvas>
+
+      <!-- Floating Corner Quick-Actions -->
+      <div id="floating-quickbar" class="hidden">
+        <button id="q-smart" class="gba-btn gba-btn-active quick-btn">⚡ Step 1: Grind</button>
+        <button id="q-water" class="gba-btn quick-btn" style="color:#7dd3fc">💧 Water (3)</button>
+        <button id="q-cat" class="gba-btn quick-btn" style="color:#fb7185">🐾 Pet Cat</button>
+        <button id="q-room" class="gba-btn quick-btn" style="color:#facc15">🚪 Room: INSIDE</button>
+      </div>
     </div>
 
-    <div class="gba-frame" style="gap:6px;padding:3px 6px;">
-      <button class="gba-btn" id="btn-bgm" onclick="toggleBgm()">♪ BGM:OFF</button>
-      <button class="gba-btn" id="btn-sfx" onclick="toggleSfx()">🔊 SFX:ON</button>
-      <button class="gba-btn" id="btn-view-top" style="color:#7dd3fc" onclick="cycleViewMode()">🏠 ALL</button>
-      <button class="gba-btn" id="btn-dock-toggle" style="color:#facc15" onclick="toggleDock()">▼ HIDE DOCK</button>
-    </div>
-  </header>
+    <!-- Collapsible Bottom GBA Action Dock -->
+    <footer id="bottom-dock" class="hidden">
+      <button class="gba-btn dock-btn" data-station="grinder">
+        <div class="top-row"><span class="gba-keycap">1</span><span>Grinder</span></div>
+        <div class="sub-row">Step 1 · Coffee</div>
+      </button>
+      <button class="gba-btn dock-btn" data-station="espresso">
+        <div class="top-row"><span class="gba-keycap">2</span><span>Espresso</span></div>
+        <div class="sub-row">Step 2 · Mocha</div>
+      </button>
+      <button class="gba-btn dock-btn" data-station="milk_frother">
+        <div class="top-row"><span class="gba-keycap">3</span><span>Frother</span></div>
+        <div class="sub-row">Step 2 · Foam</div>
+      </button>
+      <button class="gba-btn dock-btn" data-station="kettle">
+        <div class="top-row"><span class="gba-keycap">4</span><span>Kettle</span></div>
+        <div class="sub-row">Step 1 · Water</div>
+      </button>
+      <button class="gba-btn dock-btn" data-station="tea_leaves">
+        <div class="top-row"><span class="gba-keycap">5</span><span>Tea Leaves</span></div>
+        <div class="sub-row">Step 2 · Tea</div>
+      </button>
+      <button class="gba-btn dock-btn" data-station="cup_counter">
+        <div class="top-row"><span class="gba-keycap">Space</span><span>Pour Cup</span></div>
+        <div class="sub-row">Step 3 · Cup</div>
+      </button>
+      <button id="dock-serve" class="gba-btn dock-btn">
+        <div class="top-row"><span class="gba-keycap">Enter</span><span id="serve-title">Serve Drink</span></div>
+        <div class="sub-row" id="serve-sub">Needs Step 3 Cup</div>
+      </button>
+      <button id="dock-water" class="gba-btn dock-btn">
+        <div class="top-row"><span class="gba-keycap">W</span><span>Water Daisies</span></div>
+        <div class="sub-row" id="water-sub" style="color:#7dd3fc">3 thirsty · +2c</div>
+      </button>
+      <button id="dock-miata" class="gba-btn dock-btn">
+        <div class="top-row"><span class="gba-keycap">H</span><span>Miata Lights</span></div>
+        <div class="sub-row" id="miata-sub" style="color:#facc15">Pop-Ups: ON ★</div>
+      </button>
+      <button id="dock-cats" class="gba-btn dock-btn">
+        <div class="top-row"><span class="gba-keycap">C</span><span>Pet Cats</span></div>
+        <div class="sub-row" style="color:#fb7185">Lilo &amp; Champy ♥</div>
+      </button>
+    </footer>
+  </div>
 
-  <!-- Non-Overlapping Game Viewport + Floating Touch Quick-Actions -->
-  <main class="viewport-stage">
-    <canvas id="cafe-canvas" width="900" height="480"></canvas>
-    <div class="floating-quick-bar">
-      <button class="gba-btn active" id="btn-smart-step" onclick="executeSmartStep()">⚡ Smart Step</button>
-      <button class="gba-btn" style="color:#7dd3fc" id="btn-quick-water" onclick="waterNextDaisy()">💧 Water</button>
-      <button class="gba-btn" style="color:#fb7185" onclick="petCats()">🐾 Pet Cat</button>
-      <button class="gba-btn" style="color:#facc15" id="btn-quick-view" onclick="cycleViewMode()">🏠 View Mode</button>
+  <!-- Title Screen Modal -->
+  <div id="title-modal" class="modal-backdrop">
+    <div class="gba-frame modal-card">
+      <div style="font-family:'Press Start 2P',monospace;font-size:9px;color:#facc15;margin-bottom:8px">
+        GBA PIXEL EDITION · 2 MAPS + DAY/NIGHT + WEATHER
+      </div>
+      <h1 style="font-family:'Press Start 2P',monospace;font-size:24px;margin-bottom:12px">
+        KLASIK — GARDEN GARAGE CAFE ★
+      </h1>
+      <div class="gba-dialogue-box" style="padding:12px;margin-bottom:16px;font-size:19px;line-height:1.3">
+        Explore two full-screen 900x480 GBA maps: brew inside the <strong>Monochrome Coffee Shop &amp; 1990 Mazda Miata MX-5 Showroom</strong> with <strong>Lilo</strong>, or step outside to the <strong>Backyard Daisy Garden</strong> with <strong>Champy</strong>, 6 Daisy beds, Day/Sunset/Night lighting <strong>[T]</strong>, and Rain weather <strong>[G]</strong>!
+      </div>
+      <button id="btn-start" class="gba-btn gba-btn-active" style="padding:12px 20px;font-size:12px">
+        ► OPEN GARAGE DOORS [ENTER]
+      </button>
     </div>
-  </main>
+  </div>
 
-  <!-- Collapsible Bottom 10-Button Action Dock -->
-  <footer class="gba-bottom-dock" id="bottom-dock">
-    <button class="gba-btn" id="btn-grinder" onclick="interactStation('grinder')">
-      <div><span class="keycap">1</span>Grinder</div>
-      <div class="btn-sub">Step 1 · Coffee</div>
-    </button>
-    <button class="gba-btn" id="btn-espresso" onclick="interactStation('espresso')">
-      <div><span class="keycap">2</span>Espresso</div>
-      <div class="btn-sub">Step 2 · Mocha</div>
-    </button>
-    <button class="gba-btn" id="btn-milk_frother" onclick="interactStation('milk_frother')">
-      <div><span class="keycap">3</span>Frother</div>
-      <div class="btn-sub">Step 2 · Foam</div>
-    </button>
-    <button class="gba-btn" id="btn-kettle" onclick="interactStation('kettle')">
-      <div><span class="keycap">4</span>Kettle</div>
-      <div class="btn-sub">Step 1 · Water</div>
-    </button>
-    <button class="gba-btn" id="btn-tea_leaves" onclick="interactStation('tea_leaves')">
-      <div><span class="keycap">5</span>Tea Leaves</div>
-      <div class="btn-sub">Step 2 · Tea</div>
-    </button>
-    <button class="gba-btn" id="btn-cup_counter" onclick="interactStation('cup_counter')">
-      <div><span class="keycap">Space</span>Pour Cup</div>
-      <div class="btn-sub">Step 3 · Cup</div>
-    </button>
-    <button class="gba-btn" id="btn-serve" onclick="serveCustomer()">
-      <div><span class="keycap">Enter</span>★ Serve</div>
-      <div class="btn-sub">Hand to Guest</div>
-    </button>
-    <button class="gba-btn" onclick="waterNextDaisy()">
-      <div><span class="keycap">W</span>Water Daisies</div>
-      <div class="btn-sub" style="color:#7dd3fc">+2 Coins · Cozy</div>
-    </button>
-    <button class="gba-btn" onclick="toggleMiata()">
-      <div><span class="keycap">H</span>Miata Lights</div>
-      <div class="btn-sub" id="btn-miata-sub" style="color:#facc15">Pop-Ups: ON ★</div>
-    </button>
-    <button class="gba-btn" onclick="petCats()">
-      <div><span class="keycap">C</span>Pet Cats</div>
-      <div class="btn-sub" style="color:#fb7185">Lilo &amp; Champy ♥</div>
-    </button>
-  </footer>
+  <!-- Pause / Shift Summary Modal -->
+  <div id="pause-modal" class="modal-backdrop hidden">
+    <div class="gba-frame modal-card">
+      <h2 id="modal-heading" style="font-family:'Press Start 2P',monospace;font-size:18px;margin-bottom:14px">
+        CAFE PAUSED
+      </h2>
+      <div class="gba-dialogue-box" style="padding:12px;margin-bottom:16px;font-size:20px">
+        <p id="modal-stats">Cozy Rating: 85% · Hearts: 5 · Coins: $45</p>
+      </div>
+      <div style="display:flex;gap:10px">
+        <button id="btn-resume" class="gba-btn gba-btn-active" style="padding:10px 16px;font-size:10px">► RESUME</button>
+        <button id="btn-restart" class="gba-btn" style="padding:10px 16px;font-size:10px">↻ NEW SHIFT</button>
+      </div>
+    </div>
+  </div>
 
   <script>
-    /**
-     * ========================================================================
-     * 1. WEB AUDIO API 8-BIT MONO CHIPTUNE BGM SEQUENCER (76 BPM) & SFX
-     * ========================================================================
-     */
-    const LEAD_MELODY = [
-      523.25, 659.25, 783.99, 659.25, 880.0, 783.99, 659.25, 523.25,
-      440.0, 523.25, 659.25, 880.0, 783.99, 659.25, 587.33, 0,
-      349.23, 440.0, 523.25, 659.25, 587.33, 523.25, 440.0, 523.25,
-      392.0, 493.88, 587.33, 659.25, 587.33, 493.88, 392.0, 0,
-      523.25, 783.99, 1046.5, 783.99, 880.0, 783.99, 659.25, 523.25,
-      440.0, 659.25, 880.0, 1046.5, 987.77, 880.0, 783.99, 0,
-      698.46, 659.25, 587.33, 523.25, 659.25, 587.33, 523.25, 440.0,
-      392.0, 523.25, 659.25, 587.33, 523.25, 0, 392.0, 0
-    ];
-    const BASS_LINE = [
-      130.81, 0, 196.0, 0, 130.81, 0, 196.0, 0,
-      110.0, 0, 164.81, 0, 110.0, 0, 164.81, 0,
-      174.61, 0, 220.0, 0, 174.61, 0, 220.0, 0,
-      196.0, 0, 246.94, 0, 196.0, 0, 146.83, 0,
-      130.81, 0, 196.0, 0, 130.81, 0, 196.0, 0,
-      110.0, 0, 164.81, 0, 110.0, 0, 164.81, 0,
-      174.61, 0, 220.0, 0, 146.83, 0, 196.0, 0,
-      130.81, 0, 196.0, 0, 130.81, 0, 130.81, 0
-    ];
-
-    let audioCtx = null;
-    let monoMerger = null;
-    let noiseBuf = null;
-    let bgmOn = false;
-    let sfxOn = true;
-    let bgmTimer = null;
-    let bgmStep = 0;
-
-    function initAudio() {
-      if (!audioCtx) {
-        const AC = window.AudioContext || window.webkitAudioContext;
-        if (!AC) return null;
-        audioCtx = new AC();
-        monoMerger = audioCtx.createChannelMerger(1);
-        monoMerger.channelCount = 1;
-        monoMerger.channelCountMode = 'explicit';
-        monoMerger.connect(audioCtx.destination);
-
-        const sr = audioCtx.sampleRate;
-        noiseBuf = audioCtx.createBuffer(1, Math.floor(sr * 0.045), sr);
-        const d = noiseBuf.getChannelData(0);
-        for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
-      }
-      if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
-      return audioCtx;
-    }
-
-    function playBgmStep() {
-      if (!bgmOn) return;
-      const ac = initAudio();
-      if (!ac) return;
-      const now = ac.currentTime;
-      const idx = bgmStep % LEAD_MELODY.length;
-      bgmStep++;
-      const lead = LEAD_MELODY[idx];
-      const bass = BASS_LINE[idx];
-
-      if (lead > 0) {
-        const o = ac.createOscillator(), g = ac.createGain();
-        o.type = 'square'; o.frequency.setValueAtTime(lead, now);
-        g.gain.setValueAtTime(0.022, now); g.gain.exponentialRampToValueAtTime(0.001, now + 0.34);
-        o.connect(g); g.connect(monoMerger); o.start(now); o.stop(now + 0.36);
-      }
-      if (bass > 0) {
-        const o = ac.createOscillator(), g = ac.createGain();
-        o.type = 'triangle'; o.frequency.setValueAtTime(bass, now);
-        g.gain.setValueAtTime(0.035, now); g.gain.exponentialRampToValueAtTime(0.001, now + 0.36);
-        o.connect(g); g.connect(monoMerger); o.start(now); o.stop(now + 0.38);
-      }
-      if (noiseBuf && idx % 2 === 1) {
-        const n = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain();
-        n.buffer = noiseBuf; f.type = 'highpass'; f.frequency.setValueAtTime(5200, now);
-        g.gain.setValueAtTime(0.009, now); g.gain.exponentialRampToValueAtTime(0.0005, now + 0.04);
-        n.connect(f); f.connect(g); g.connect(monoMerger); n.start(now); n.stop(now + 0.045);
-      }
-    }
-
-    window.toggleBgm = function() {
-      bgmOn = !bgmOn;
-      if (bgmTimer) { clearInterval(bgmTimer); bgmTimer = null; }
-      if (bgmOn) {
-        playBgmStep();
-        bgmTimer = setInterval(playBgmStep, Math.round((60 / 76 / 2) * 1000));
-      }
-      const btn = document.getElementById('btn-bgm');
-      btn.textContent = '♪ BGM:' + (bgmOn ? 'ON' : 'OFF');
-      btn.classList.toggle('active', bgmOn);
-    };
-
-    window.toggleSfx = function() {
-      sfxOn = !sfxOn;
-      document.getElementById('btn-sfx').textContent = '🔊 SFX:' + (sfxOn ? 'ON' : 'OFF');
-    };
-
-    function playTone(freq, type = 'square', dur = 0.12) {
-      if (!sfxOn) return;
-      const ac = initAudio();
-      if (!ac) return;
-      const now = ac.currentTime;
-      const o = ac.createOscillator(), g = ac.createGain();
-      o.type = type; o.frequency.setValueAtTime(freq, now);
-      g.gain.setValueAtTime(0.05, now); g.gain.exponentialRampToValueAtTime(0.001, now + dur);
-      o.connect(g); g.connect(monoMerger); o.start(now); o.stop(now + dur + 0.01);
-    }
-
-    /**
-     * ========================================================================
-     * 2. GBA PIXEL MATRIX ENGINE & ARCHITECTURAL ZONES
-     * ========================================================================
-     */
-    const canvas = document.getElementById('cafe-canvas');
-    const ctx = canvas.getContext('2d');
-    function px(n) { return Math.round(n / 2) * 2; }
-
-    function drawSpriteMatrix(ctx, matrix, palette, centerX, centerY, pixelSize = 2, flipX = false) {
-      const rows = matrix.length, cols = matrix[0].length;
-      const startX = Math.round(centerX - (cols * pixelSize) / 2);
-      const startY = Math.round(centerY - (rows * pixelSize) / 2);
-      for (let r = 0; r < rows; r++) {
-        for (let c = 0; c < cols; c++) {
-          const ch = matrix[r][flipX ? cols - 1 - c : c];
-          if (ch === '.' || ch === ' ') continue;
-          const col = palette[ch];
-          if (!col) continue;
-          ctx.fillStyle = col;
-          ctx.fillRect(startX + c * pixelSize, startY + r * pixelSize, pixelSize, pixelSize);
-        }
-      }
-    }
-
-    function drawPixelBox(x, y, w, h, fill, outline, topHighlight) {
-      const rx = px(x), ry = px(y), rw = px(w), rh = px(h);
-      if (outline) { ctx.fillStyle = outline; ctx.fillRect(rx - 2, ry - 2, rw + 4, rh + 4); }
-      ctx.fillStyle = fill; ctx.fillRect(rx, ry, rw, rh);
-      if (topHighlight) { ctx.fillStyle = topHighlight; ctx.fillRect(rx, ry, rw, 4); }
-    }
-
-    const CHIBI_MATRIX = [
-      '....OOOOOOOO....',
-      '..OOhhhhhhhhOO..',
-      '.OOHHHHHHHHHHOO.',
-      '.OHBBBBBBBBBBHO.',
-      '.OHHHHHHHHHHHHO.',
-      '.OHSSSSSSSSSSHO.',
-      '.OSSSSSSSSSSSSO.',
-      '.OSSESSSSSSESSO.',
-      '.OSSCSSSSSSCSSO.',
-      '..OOSSSSSSSSOO..',
-      '..OOTTTTTTTTOO..',
-      '.OTTTAAAAAATTTO.',
-      '.OTTAAWWWWAAATO.',
-      '.OSTA.AAAA.ATSO.',
-      '..OOAAAAAAAAOO..',
-      '...OOPPPPPPOO...',
-      '...OPPP..PPPO...',
-      '...OFFO..OFFO...'
-    ];
-
-    const CAT_WALK_0 = [
-      '.OO......OO.....',
-      'OBSO....OSBO....',
-      'OBBBOOOOBBBO..OO',
-      'OBBBBBBBBBBO.OBO',
-      'OBEBBBBBBBEBOBO.',
-      'OBBBBBBBBBBBBO..',
-      '.OCCCCCCCCCCO...',
-      '.OBBBBGGbbbbO...',
-      '.OBBBBBBBBBBO...',
-      '.OBBBBBBBBBBO...',
-      '..OBBO..OBBO....',
-      '..OO......OO....'
-    ];
-    const CAT_GROOM = [
-      '..OO......OO....',
-      '.OBSO....OSBO...',
-      '.OBBBOOOOBBBO...',
-      '.OBBBBBBBBBBO...',
-      '.OOOBBBBBBBEBO..',
-      'OBSOOBBBBBBBO...',
-      'OO.OCCCCCCCCO...',
-      '...OBBBBGGbbO...',
-      '...OBBBBBBBBBOOO',
-      '...OBBBBBBBBBOBO',
-      '....OBBBBBBBBBO.',
-      '....OOOOOOOOOO..'
-    ];
-    const CAT_SLEEP = [
-      '................',
-      '....OOOOOOOO....',
-      '..OOBBBBBBBBOO..',
-      '.OBSOOOOOOOOSBO.',
-      'OBBBOCCCCCCOBBBO',
-      'OBBBBBBBBBBBBBBO',
-      'OBBBBBBBBBBBBBBO',
-      '.OOBBBBBBBBBBOO.',
-      '...OOOOOOOOOO...'
-    ];
-
     const RECIPES = {
-      midnight_cold_brew: { name: 'Midnight Cold Brew', steps: ['grinder', 'milk_frother', 'cup_counter'], price: 14, color: '#18181b', accent: '#f8fafc' },
-      daisy_vanilla_latte: { name: 'Daisy Vanilla Latte', steps: ['grinder', 'milk_frother', 'cup_counter'], price: 16, color: '#d6a87c', accent: '#fef08a' },
-      miata_mocha: { name: "'90s Miata Mocha", steps: ['grinder', 'espresso', 'cup_counter'], price: 18, color: '#3f2318', accent: '#f43f5e' },
-      catnip_herbal_tea: { name: 'Catnip Herbal Tea', steps: ['kettle', 'tea_leaves', 'cup_counter'], price: 15, color: '#10b981', accent: '#d1fae5' }
+      midnight_cold_brew: { name: 'Midnight Cold Brew', shortName: 'Cold Brew', price: 14, color: '#0f172a', accent: '#38bdf8', steps: ['grinder', 'kettle', 'cup_counter'] },
+      daisy_vanilla_latte: { name: 'Daisy Vanilla Latte', shortName: 'Daisy Latte', price: 16, color: '#fef08a', accent: '#f59e0b', steps: ['grinder', 'milk_frother', 'cup_counter'] },
+      miata_mocha: { name: "'90s Miata Mocha", shortName: 'Miata Mocha', price: 18, color: '#dc2626', accent: '#f8fafc', steps: ['grinder', 'espresso', 'cup_counter'] },
+      catnip_herbal_tea: { name: 'Lilo & Champy Tea', shortName: 'Catnip Tea', price: 15, color: '#16a34a', accent: '#86efac', steps: ['kettle', 'tea_leaves', 'cup_counter'] }
     };
 
     const STATIONS = [
-      { id: 'grinder',      label: 'GRINDER',    x: 204, y: 138, w: 62, h: 48 },
-      { id: 'espresso',     label: 'ESPRESSO',   x: 280, y: 138, w: 66, h: 48 },
-      { id: 'milk_frother', label: 'FROTHER',    x: 356, y: 138, w: 62, h: 48 },
-      { id: 'kettle',       label: 'KETTLE',     x: 432, y: 138, w: 62, h: 48 },
-      { id: 'tea_leaves',   label: 'TEA LEAVES', x: 508, y: 138, w: 62, h: 48 },
-      { id: 'trash',        label: 'CLEAR',      x: 580, y: 138, w: 52, h: 48 },
-      { id: 'watering_can', label: 'WATER CAN',  x: 224, y: 238, w: 64, h: 44 },
-      { id: 'cup_counter',  label: 'SERVE CUP',  x: 392, y: 238, w: 112, h: 44 }
+      { id: 'grinder', shortLabel: 'Grinder', x: 112, y: 138, width: 64, height: 46, dur: 0.6, key: '1' },
+      { id: 'espresso', shortLabel: 'Espresso', x: 190, y: 138, width: 68, height: 46, dur: 0.6, key: '2' },
+      { id: 'milk_frother', shortLabel: 'Frother', x: 268, y: 138, width: 64, height: 46, dur: 0.6, key: '3' },
+      { id: 'kettle', shortLabel: 'Kettle', x: 346, y: 138, width: 64, height: 46, dur: 0.6, key: '4' },
+      { id: 'tea_leaves', shortLabel: 'Tea Leaves', x: 424, y: 138, width: 64, height: 46, dur: 0.6, key: '5' },
+      { id: 'trash', shortLabel: 'Clear', x: 498, y: 138, width: 54, height: 46, dur: 0, key: 'X' },
+      { id: 'watering_can', shortLabel: 'Well', x: 450, y: 254, width: 72, height: 54, dur: 0, key: 'W' },
+      { id: 'cup_counter', shortLabel: 'Serve Cup', x: 356, y: 238, width: 112, height: 44, dur: 0.35, key: 'Space' }
     ];
 
-    const DAISIES = [
-      { id: 0, name: 'West Patio Planter',     x: 78,  y: 162, hydration: 38, needsWater: true },
-      { id: 1, name: 'Veranda Corner Planter', x: 78,  y: 318, hydration: 82, needsWater: false },
-      { id: 2, name: 'Garden Walk Left Bed',   x: 226, y: 426, hydration: 42, needsWater: true },
-      { id: 3, name: 'Garden Walk Right Bed',  x: 548, y: 426, hydration: 88, needsWater: false },
-      { id: 4, name: 'Garage Driveway Bed',    x: 812, y: 426, hydration: 34, needsWater: true }
-    ];
+    const INDOOR_TABLES = [{ x: 132, y: 358 }, { x: 264, y: 382 }, { x: 492, y: 358 }];
+    const GARDEN_TABLES = [{ x: 268, y: 214 }, { x: 632, y: 214 }, { x: 268, y: 352 }, { x: 632, y: 352 }];
+    const MIATA_BOUNDS = { x: 748, y: 248, width: 118, height: 180 };
+    const INSIDE_DOOR = { x: 356, y: 446, width: 120, height: 34 };
+    const GARDEN_DOOR = { x: 450, y: 102, width: 120, height: 34 };
+    const ORDER_WIN = { x: 260, y: 82, width: 156, height: 48 };
 
-    const CATS = [
-      { id: 'lilo',   name: 'Lilo',   coat: '#ffffff', eye: '#38bdf8', collar: '#2563eb', x: 742, y: 268, tx: 742, ty: 268, state: 'napping', timer: 5.0, heartTimer: 0 },
-      { id: 'champy', name: 'Champy', coat: '#18181b', eye: '#22c55e', collar: '#14b8a6', x: 256, y: 356, tx: 306, ty: 368, state: 'walking', timer: 4.0, heartTimer: 0 }
-    ];
+    let audioCtx = null;
+    let sfxMuted = false;
+    let bgmEnabled = false;
+    let bgmStep = 0;
+    let bgmTimer = 0;
+    const BGM_NOTES = [261.63, 329.63, 392.0, 493.88, 392.0, 329.63, 293.66, 392.0, 220.0, 261.63, 329.63, 392.0, 329.63, 261.63, 246.94, 329.63];
 
-    let state = {
-      viewMode: 'all', // 'all' | 'indoor' | 'outdoor'
-      cam: { zoom: 1, fx: 450, fy: 240 },
-      served: 0,
+    function getAudio() {
+      if (!audioCtx) {
+        const Ctx = window.AudioContext || window.webkitAudioContext;
+        if (Ctx) audioCtx = new Ctx();
+      }
+      if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+      return audioCtx;
+    }
+
+    function playTone(freq, dur, type = 'square', gainVal = 0.05) {
+      if (sfxMuted) return;
+      const ctx = getAudio();
+      if (!ctx) return;
+      const osc = ctx.createOscillator();
+      const g = ctx.createGain();
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, ctx.currentTime);
+      g.gain.setValueAtTime(gainVal, ctx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur);
+      osc.connect(g);
+      g.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + dur);
+    }
+
+    const state = {
+      mode: 'title',
+      room: 'inside',
+      timeOfDay: 'day',
+      weather: 'clear',
+      dockCollapsed: false,
+      cozyRating: 84,
       hearts: 3,
       coins: 25,
-      cozy: 82,
-      activeDrink: null,
-      step: 0,
-      timer: 0,
-      maxTimer: 0.6,
-      busyStation: null,
-      miataLights: true,
+      servedCount: 0,
+      dailyTarget: 6,
+      miataHeadlightsOn: true,
+      catPetBonus: 0,
+      prep: { activeDrink: null, step: 0, procStation: null, timer: 0, dur: 0 },
+      barista: { x: 296, y: 192, tx: 296, ty: 192, boost: 0 },
+      daisies: [
+        { id: 'd1', name: 'Northwest Veranda Bed', x: 110, y: 176, hydration: 42, needsWater: true },
+        { id: 'd2', name: 'Northeast Trellis Bed', x: 790, y: 176, hydration: 86, needsWater: false },
+        { id: 'd3', name: 'West Lawn Planter', x: 110, y: 304, hydration: 38, needsWater: true },
+        { id: 'd4', name: 'East Lawn Planter', x: 790, y: 304, hydration: 82, needsWater: false },
+        { id: 'd5', name: 'Southwest Gate Bed', x: 204, y: 424, hydration: 44, needsWater: true },
+        { id: 'd6', name: 'Southeast Gate Bed', x: 696, y: 424, hydration: 90, needsWater: false }
+      ],
+      cats: [
+        { id: 'lilo', name: 'Lilo', room: 'inside', coat: 'white', eye: '#38bdf8', collar: '#2563eb', x: 748, y: 274, tx: 748, ty: 274, state: 'napping', timer: 5 },
+        { id: 'champy', name: 'Champy', room: 'garden', coat: 'black', eye: '#22c55e', collar: '#14b8a6', x: 310, y: 332, tx: 590, ty: 332, state: 'walking', timer: 4 }
+      ],
+      customer: { name: 'Flora', order: 'miata_mocha', x: 356, y: 312 },
       popups: [],
-      barista: { x: 336, y: 196, targetX: 336, targetY: 196, boost: 0 },
-      customer: { name: 'Flora', order: 'miata_mocha', x: 392, y: 322 }
+      particles: [],
+      lastMessage: "Flora ordered a '90s Miata Mocha! Tap ⚡ Smart Step or [1] -> [2] -> [Space]."
     };
 
-    function spawnPopup(text, x, y, color = '#facc15') {
-      state.popups.push({ text, x, y, life: 1.3, maxLife: 1.3, color });
+    function spawnPopup(text, x, y, color = '#facc15', room = state.room) {
+      state.popups.push({ text, x, y, life: 1.3, maxLife: 1.3, color, room });
+    }
+
+    function recalcCozy() {
+      const avg = state.daisies.reduce((s, d) => s + d.hydration, 0) / state.daisies.length;
+      const hydrated = state.daisies.filter(d => !d.needsWater).length;
+      const rainBonus = state.weather === 'rain' ? 8 : state.weather === 'breeze' ? 3 : 0;
+      state.cozyRating = Math.min(100, Math.round(avg * 0.5 + (hydrated / state.daisies.length) * 30 + Math.min(15, state.hearts * 1.5) + state.catPetBonus + rainBonus));
     }
 
     function getRecommendedStation() {
-      if (state.step >= 3) return null;
-      const drinkId = state.activeDrink || state.customer.order;
-      return RECIPES[drinkId].steps[state.step];
+      if (state.prep.step >= 3) return null;
+      const drinkKey = state.prep.activeDrink || state.customer.order;
+      return RECIPES[drinkKey].steps[state.prep.step];
     }
 
-    function syncHud(msg) {
-      const avgH = DAISIES.reduce((s, d) => s + d.hydration, 0) / DAISIES.length;
-      const watered = DAISIES.filter(d => !d.needsWater).length;
-      state.cozy = Math.min(100, Math.round(avgH * 0.5 + (watered / DAISIES.length) * 30 + Math.min(20, state.hearts * 2)));
-      document.getElementById('hud-cozy').textContent = state.cozy + '%';
-      document.getElementById('hud-hearts').textContent = String(state.hearts);
-      document.getElementById('hud-served').textContent = state.served + '/6';
-      document.getElementById('hud-coins').textContent = String(state.coins);
-
+    function syncHud() {
+      document.getElementById('hud-cozy').textContent = state.cozyRating + '%';
+      document.getElementById('hud-hearts').textContent = state.hearts;
+      document.getElementById('hud-served').textContent = state.servedCount + '/' + state.dailyTarget;
+      document.getElementById('hud-coins').textContent = state.coins;
       const rec = RECIPES[state.customer.order];
-      document.getElementById('hud-order-title').textContent =
-        state.customer.name.toUpperCase() + ': ' + rec.name.toUpperCase() + ' (STEP ' + state.step + '/3)';
-      if (msg) document.getElementById('hud-msg').textContent = msg;
-      document.getElementById('btn-miata-sub').textContent = state.miataLights ? 'Pop-Ups: ON ★' : 'Pop-Ups: OFF';
+      document.getElementById('hud-order-title').textContent = state.customer.name.toUpperCase() + ': ' + rec.name.toUpperCase();
+      document.getElementById('hud-step-badge').textContent = 'STEP ' + state.prep.step + '/3';
+      document.getElementById('hud-message').textContent = state.lastMessage;
+      document.getElementById('miata-sub').textContent = state.miataHeadlightsOn ? 'Pop-Ups: ON ★' : 'Pop-Ups: OFF';
 
-      const nextSt = state.step < 3 && !state.busyStation ? getRecommendedStation() : null;
-      STATIONS.forEach(s => {
-        const b = document.getElementById('btn-' + s.id);
-        if (b) b.classList.toggle('active', s.id === nextSt);
-      });
-      document.getElementById('btn-serve').classList.toggle('active', state.step === 3);
+      const thirsty = state.daisies.filter(d => d.needsWater).length;
+      document.getElementById('water-sub').textContent = state.weather === 'rain' ? '🌧️ Rain Hydrating!' : (thirsty > 0 ? thirsty + ' thirsty · +2c' : '6 Beds Hydrated');
+      document.getElementById('q-water').textContent = '💧 Water' + (thirsty > 0 ? ' (' + thirsty + ')' : '');
 
-      const smartBtn = document.getElementById('btn-smart-step');
-      if (state.step === 3) smartBtn.textContent = '⚡ Serve Guest!';
-      else if (nextSt) smartBtn.textContent = '⚡ Step ' + (state.step + 1) + ': ' + nextSt.replace('_', ' ').toUpperCase();
-      else smartBtn.textContent = '⚡ Smart Step';
-    }
+      const roomLbl = state.room === 'inside' ? 'INSIDE' : 'GARDEN';
+      document.getElementById('btn-room').textContent = '🚪 ' + roomLbl;
+      document.getElementById('q-room').textContent = '🚪 Room: ' + roomLbl;
 
-    window.toggleDock = function() {
-      const dock = document.getElementById('bottom-dock');
-      const collapsed = dock.classList.toggle('collapsed');
-      document.getElementById('btn-dock-toggle').textContent =
-        collapsed ? '▲ RECIPES & CONTROLS' : '▼ HIDE DOCK';
-    };
+      const timeMap = { day: '☀️ DAY', sunset: '🌅 SUNSET', night: '🌙 NIGHT' };
+      document.getElementById('btn-time').textContent = timeMap[state.timeOfDay];
 
-    window.cycleViewMode = function() {
-      const modes = ['all', 'indoor', 'outdoor'];
-      state.viewMode = modes[(modes.indexOf(state.viewMode) + 1) % modes.length];
-      const label = state.viewMode.toUpperCase();
-      document.getElementById('btn-view-top').textContent = '🏠 ' + label;
-      document.getElementById('btn-quick-view').textContent = '🏠 View: ' + label;
-      playTone(440, 'triangle', 0.08);
-      syncHud('Camera View Mode switched to ' + label + '.');
-    };
+      const weatherMap = { clear: '⛅ CLEAR', breeze: '🍃 BREEZE', rain: '🌧️ RAIN' };
+      document.getElementById('btn-weather').textContent = weatherMap[state.weather];
 
-    window.interactStation = function(id) {
-      if (state.busyStation && state.timer > 0) {
-        state.step = Math.min(3, state.step + 1);
-        state.busyStation = null;
-        state.timer = 0;
-      }
-      const st = STATIONS.find(s => s.id === id);
-      if (st) state.barista.targetX = Math.max(200, Math.min(585, st.x));
-      if (id === 'trash') { state.step = 0; state.activeDrink = null; syncHud('Cleared counter tray.'); return; }
-      if (id === 'watering_can') { window.waterNextDaisy(); return; }
-      if (id === 'cup_counter' && state.step === 3) { window.serveCustomer(); return; }
-
-      const expected = getRecommendedStation();
-      if (id === expected) {
-        state.activeDrink = state.customer.order;
-        state.busyStation = id;
-        state.maxTimer = id === 'cup_counter' ? 0.25 : 0.6;
-        state.timer = state.maxTimer;
-        playTone(523.25, 'square', 0.1);
-        syncHud('Brewing Step ' + (state.step + 1) + '/3 at ' + st.label + '...');
-      } else {
-        syncHud('Follow the ▼ NEXT arrow over the highlighted appliance!');
-      }
-    };
-
-    window.executeSmartStep = function() {
-      if (state.busyStation && state.timer > 0) {
-        state.step = Math.min(3, state.step + 1);
-        state.busyStation = null;
-        state.timer = 0;
-      }
-      if (state.step === 3) {
-        window.serveCustomer();
-        return;
-      }
       const nextSt = getRecommendedStation();
-      if (nextSt) window.interactStation(nextSt);
-    };
+      document.querySelectorAll('[data-station]').forEach(btn => {
+        btn.classList.toggle('gba-btn-active', btn.dataset.station === nextSt);
+      });
 
-    window.serveCustomer = function() {
-      if (state.step < 3 || !state.activeDrink) { syncHud('Finish all 3 steps or tap ⚡ Smart Step!'); return; }
+      const qSmart = document.getElementById('q-smart');
+      if (state.prep.step === 3) {
+        qSmart.textContent = '⚡ Serve Guest!';
+        document.getElementById('dock-serve').classList.add('gba-btn-active');
+      } else {
+        const nextStObj = STATIONS.find(s => s.id === nextSt);
+        qSmart.textContent = nextStObj ? '⚡ Step ' + (state.prep.step + 1) + ': ' + nextStObj.shortLabel : '⚡ Smart Step';
+        document.getElementById('dock-serve').classList.remove('gba-btn-active');
+      }
+    }
+
+    function triggerStation(id) {
+      if (state.mode !== 'playing') return;
+      state.room = 'inside';
+      const stObj = STATIONS.find(s => s.id === id);
+      if (stObj) { state.barista.tx = stObj.x; state.barista.ty = 192; }
+
+      if (state.prep.procStation && state.prep.timer > 0) {
+        state.prep.procStation = null;
+        state.prep.timer = 0;
+        state.prep.step = Math.min(3, state.prep.step + 1);
+      }
+
+      if (id === 'trash') {
+        state.prep.activeDrink = null; state.prep.step = 0;
+        state.lastMessage = 'Cleared prep bar.';
+        syncHud(); return;
+      }
+
+      const targetOrder = state.customer.order;
+      const rec = RECIPES[targetOrder];
+      const expected = rec.steps[state.prep.step];
+
+      if (id === expected) {
+        state.prep.activeDrink = targetOrder;
+        state.prep.procStation = id;
+        state.prep.dur = stObj.dur;
+        state.prep.timer = stObj.dur;
+        playTone(440, 0.09);
+        state.lastMessage = 'Working on ' + rec.name + ' at ' + stObj.shortLabel + '...';
+      } else {
+        const expObj = STATIONS.find(s => s.id === expected);
+        state.lastMessage = 'For ' + rec.name + ', click ' + (expObj ? expObj.shortLabel : 'next station') + '!';
+      }
+      syncHud();
+    }
+
+    function serveCustomer() {
+      state.room = 'inside';
+      if (state.prep.step < 3) {
+        state.lastMessage = 'Finish Step 3 at Pour Cup [Space] first!';
+        syncHud(); return;
+      }
       const rec = RECIPES[state.customer.order];
-      state.served++; state.hearts += 2; state.coins += rec.price + 3;
-      spawnPopup('+' + (rec.price + 3) + 'c ♥+2', state.customer.x, state.customer.y - 30, '#facc15');
-      playTone(783.99, 'square', 0.18);
-      state.step = 0; state.activeDrink = null;
+      state.coins += rec.price + 4;
+      state.hearts += 2;
+      state.servedCount += 1;
+      state.prep.activeDrink = null;
+      state.prep.step = 0;
+      recalcCozy();
+      playTone(587.33, 0.12);
+      setTimeout(() => playTone(880, 0.18), 90);
+      spawnPopup('+' + (rec.price + 4) + 'c ♥+2', state.customer.x, state.customer.y - 28, '#facc15', 'inside');
+
       const keys = Object.keys(RECIPES);
-      const names = ['Flora', 'Milo', 'Takumi', 'Clara', 'Keisuke'];
-      state.customer = {
-        name: names[state.served % names.length],
-        order: keys[state.served % keys.length],
-        x: 392, y: 322
-      };
-      syncHud('Served ' + rec.name + '! +' + (rec.price + 3) + ' Coins!');
-    };
+      const names = ['Flora', 'Takumi', 'Milo', 'Keisuke', 'Clara', 'Suki'];
+      state.customer.name = names[state.servedCount % names.length];
+      state.customer.order = keys[state.servedCount % keys.length];
+      state.lastMessage = 'Served! Next: ' + state.customer.name + ' ordered ' + RECIPES[state.customer.order].name + '!';
+      syncHud();
+    }
 
-    window.waterNextDaisy = function() {
-      const target = [...DAISIES].sort((a, b) => a.hydration - b.hydration)[0];
-      if (target) {
-        target.hydration = 100; target.needsWater = false;
-        state.coins += 2;
-        spawnPopup('+💧 COZY! +2c', target.x, target.y - 24, '#38bdf8');
-        playTone(587.33, 'sine', 0.14);
-        syncHud('Watered ' + target.name + '! +2 Coins & Cozy Rating boosted.');
+    function executeSmartStep() {
+      state.room = 'inside';
+      if (state.prep.procStation && state.prep.timer > 0) {
+        state.prep.procStation = null;
+        state.prep.timer = 0;
+        state.prep.step = Math.min(3, state.prep.step + 1);
       }
+      if (state.prep.step === 3) {
+        serveCustomer();
+      } else {
+        const nextSt = getRecommendedStation();
+        if (nextSt) triggerStation(nextSt);
+      }
+    }
+
+    function waterDaisy(d) {
+      state.room = 'garden';
+      state.barista.tx = d.x; state.barista.ty = d.y;
+      d.hydration = 100; d.needsWater = false;
+      state.coins += 2;
+      recalcCozy();
+      playTone(523.25, 0.08, 'sine');
+      spawnPopup('+💧 COZY! +2c', d.x, d.y - 22, '#38bdf8', 'garden');
+      state.lastMessage = 'Watered ' + d.name + ' in the Backyard Garden! +2 Coins & Cozy Rating ' + state.cozyRating + '%.';
+      syncHud();
+    }
+
+    function petCats() {
+      const cat = state.cats.find(c => c.room === state.room) || state.cats[0];
+      cat.state = 'purring'; cat.timer = 3.5;
+      state.hearts += 1;
+      state.catPetBonus = Math.min(15, state.catPetBonus + 5);
+      recalcCozy();
+      playTone(340, 0.14, 'triangle');
+      spawnPopup('♥ ' + cat.name.toUpperCase() + ' ♪', cat.x, cat.y - 20, '#fb7185', cat.room);
+      state.lastMessage = 'Petted ' + cat.name + '! Purrrr~ ♥♪ Cozy Rating ' + state.cozyRating + '%!';
+      syncHud();
+    }
+
+    function toggleRoom() {
+      state.room = state.room === 'inside' ? 'garden' : 'inside';
+      state.lastMessage = state.room === 'inside'
+        ? 'Entered the Monochrome Coffee Shop & 1990 Miata Garage Showroom!'
+        : 'Stepped out to the Backyard Daisy Garden!';
+      playTone(360, 0.05);
+      syncHud();
+    }
+
+    function cycleTime() {
+      const order = ['day', 'sunset', 'night'];
+      state.timeOfDay = order[(order.indexOf(state.timeOfDay) + 1) % order.length];
+      playTone(420, 0.05);
+      syncHud();
+    }
+
+    function cycleWeather() {
+      const order = ['clear', 'breeze', 'rain'];
+      state.weather = order[(order.indexOf(state.weather) + 1) % order.length];
+      recalcCozy();
+      playTone(480, 0.05);
+      syncHud();
+    }
+
+    document.getElementById('btn-start').onclick = () => {
+      state.mode = 'playing';
+      document.body.dataset.state = 'playing';
+      document.getElementById('title-modal').classList.add('hidden');
+      document.getElementById('top-hud').classList.remove('hidden');
+      document.getElementById('floating-quickbar').classList.remove('hidden');
+      document.getElementById('bottom-dock').classList.remove('hidden');
+      playTone(587.33, 0.1);
+      syncHud();
     };
 
-    window.toggleMiata = function() {
-      state.miataLights = !state.miataLights;
-      spawnPopup(state.miataLights ? 'POP-UPS: ON ★' : 'POP-UPS: OFF', 742, 200, '#facc15');
-      playTone(state.miataLights ? 440 : 220, 'square', 0.1);
-      syncHud(state.miataLights ? '1990 Miata MX-5 Pop-Up Headlights UP! ★' : '1990 Miata MX-5 Pop-Up Headlights DOWN.');
+    document.getElementById('btn-room').onclick = toggleRoom;
+    document.getElementById('q-room').onclick = toggleRoom;
+    document.getElementById('btn-time').onclick = cycleTime;
+    document.getElementById('btn-weather').onclick = cycleWeather;
+
+    document.getElementById('btn-bgm').onclick = () => {
+      bgmEnabled = !bgmEnabled;
+      document.getElementById('btn-bgm').textContent = bgmEnabled ? '♪ BGM:ON' : '♪ BGM:OFF';
     };
 
-    window.petCats = function() {
-      const c = CATS[state.hearts % CATS.length];
-      c.heartTimer = 2.4;
-      c.state = 'grooming';
-      c.timer = 3.5;
-      state.hearts++;
-      state.barista.boost = 6.0;
-      spawnPopup('♥ ' + c.name.toUpperCase() + ' ♪', c.x, c.y - 22, '#fb7185');
-      playTone(659.25, 'sine', 0.16);
-      syncHud('Petted ' + c.name + '! Purrrr~ ♥♪ +Speed Boost!');
+    document.getElementById('btn-mute').onclick = () => {
+      sfxMuted = !sfxMuted;
+      document.getElementById('btn-mute').textContent = sfxMuted ? '🔊 SFX:OFF' : '🔊 SFX:ON';
     };
 
-    window.addEventListener('keydown', (e) => {
+    document.getElementById('btn-dock').onclick = () => {
+      state.dockCollapsed = !state.dockCollapsed;
+      document.getElementById('bottom-dock').classList.toggle('collapsed', state.dockCollapsed);
+      document.getElementById('btn-dock').textContent = state.dockCollapsed ? '▲ DOCK' : '▼ DOCK';
+    };
+
+    document.getElementById('btn-pause').onclick = () => {
+      state.mode = 'paused';
+      document.getElementById('modal-stats').textContent =
+        'Cozy Rating: ' + state.cozyRating + '% · Hearts: ' + state.hearts + ' · Coins: $' + state.coins;
+      document.getElementById('pause-modal').classList.remove('hidden');
+    };
+
+    document.getElementById('btn-resume').onclick = () => {
+      state.mode = 'playing';
+      document.getElementById('pause-modal').classList.add('hidden');
+    };
+
+    document.getElementById('btn-restart').onclick = () => location.reload();
+
+    document.querySelectorAll('[data-station]').forEach(btn => {
+      btn.onclick = () => triggerStation(btn.dataset.station);
+    });
+    document.getElementById('dock-serve').onclick = serveCustomer;
+    document.getElementById('dock-water').onclick = () => {
+      const sorted = [...state.daisies].sort((a, b) => a.hydration - b.hydration);
+      waterDaisy(sorted[0]);
+    };
+    document.getElementById('dock-miata').onclick = () => {
+      state.room = 'inside';
+      state.miataHeadlightsOn = !state.miataHeadlightsOn;
+      playTone(state.miataHeadlightsOn ? 520 : 320, 0.08);
+      spawnPopup(state.miataHeadlightsOn ? 'HEADLIGHTS UP! ★' : 'HEADLIGHTS DOWN', MIATA_BOUNDS.x, MIATA_BOUNDS.y - 36, '#facc15', 'inside');
+      syncHud();
+    };
+    document.getElementById('dock-cats').onclick = petCats;
+    document.getElementById('q-smart').onclick = executeSmartStep;
+    document.getElementById('q-water').onclick = () => document.getElementById('dock-water').click();
+    document.getElementById('q-cat').onclick = petCats;
+
+    window.addEventListener('keydown', e => {
+      if (state.mode === 'title' && (e.key === 'Enter' || e.key === ' ')) {
+        document.getElementById('btn-start').click(); return;
+      }
+      if (state.mode !== 'playing') return;
       const k = e.key.toLowerCase();
-      if (k === '1') window.interactStation('grinder');
-      else if (k === '2') window.interactStation('espresso');
-      else if (k === '3') window.interactStation('milk_frother');
-      else if (k === '4') window.interactStation('kettle');
-      else if (k === '5') window.interactStation('tea_leaves');
-      else if (k === 'e') window.executeSmartStep();
-      else if (k === 'v') window.cycleViewMode();
-      else if (k === 'b') window.toggleBgm();
-      else if (k === 'm') window.toggleSfx();
-      else if (k === ' ') { e.preventDefault(); state.step === 3 ? window.serveCustomer() : window.interactStation('cup_counter'); }
-      else if (k === 'enter') window.serveCustomer();
-      else if (k === 'w') window.waterNextDaisy();
-      else if (k === 'h') window.toggleMiata();
-      else if (k === 'c') window.petCats();
+      if (k === '1') triggerStation('grinder');
+      else if (k === '2') triggerStation('espresso');
+      else if (k === '3') triggerStation('milk_frother');
+      else if (k === '4') triggerStation('kettle');
+      else if (k === '5') triggerStation('tea_leaves');
+      else if (k === 'e') executeSmartStep();
+      else if (k === ' ') { e.preventDefault(); state.prep.step === 3 ? serveCustomer() : triggerStation('cup_counter'); }
+      else if (k === 'enter') { e.preventDefault(); serveCustomer(); }
+      else if (k === 'w') document.getElementById('dock-water').click();
+      else if (k === 'h') document.getElementById('dock-miata').click();
+      else if (k === 'c') petCats();
+      else if (k === 'v') toggleRoom();
+      else if (k === 't') cycleTime();
+      else if (k === 'g') cycleWeather();
+      else if (k === 'b') document.getElementById('btn-bgm').click();
     });
 
-    canvas.addEventListener('pointerdown', (e) => {
+    const canvas = document.getElementById('game-canvas');
+    const ctx = canvas.getContext('2d');
+
+    canvas.addEventListener('pointerdown', e => {
+      if (state.mode !== 'playing') return;
       const rect = canvas.getBoundingClientRect();
-      const cx = ((e.clientX - rect.left) / rect.width) * 900;
-      const cy = ((e.clientY - rect.top) / rect.height) * 480;
-      const wx = (cx - 450) / state.cam.zoom + state.cam.fx;
-      const wy = (cy - 240) / state.cam.zoom + state.cam.fy;
+      const x = ((e.clientX - rect.left) / rect.width) * 900;
+      const y = ((e.clientY - rect.top) / rect.height) * 480;
 
-      for (const c of CATS) {
-        if (Math.abs(wx - c.x) <= 28 && Math.abs(wy - c.y) <= 24) { window.petCats(); return; }
-      }
-      if (Math.abs(wx - 742) <= 58 && Math.abs(wy - 242) <= 88) { window.toggleMiata(); return; }
-      for (const d of DAISIES) {
-        if (Math.abs(wx - d.x) <= 46 && Math.abs(wy - d.y) <= 32) {
-          d.hydration = 100; d.needsWater = false; state.coins += 2;
-          spawnPopup('+💧 COZY! +2c', d.x, d.y - 24, '#38bdf8');
-          syncHud('Watered ' + d.name + '! +2 Coins');
-          return;
+      for (const cat of state.cats) {
+        if (cat.room === state.room && Math.abs(x - cat.x) <= 28 && Math.abs(y - cat.y) <= 24) {
+          petCats(); return;
         }
       }
-      if (wx >= state.customer.x - 30 && wx <= state.customer.x + 220 && Math.abs(wy - state.customer.y) <= 44) {
-        window.executeSmartStep(); return;
-      }
-      for (const s of STATIONS) {
-        if (Math.abs(wx - s.x) <= s.w / 2 + 6 && Math.abs(wy - s.y) <= s.h / 2 + 6) {
-          window.interactStation(s.id); return;
+
+      if (state.room === 'inside') {
+        if (Math.abs(x - INSIDE_DOOR.x) <= 64 && Math.abs(y - INSIDE_DOOR.y) <= 20) { toggleRoom(); return; }
+        if (Math.abs(x - MIATA_BOUNDS.x) <= 60 && Math.abs(y - MIATA_BOUNDS.y) <= 90) { document.getElementById('dock-miata').click(); return; }
+        if (x >= state.customer.x - 32 && x <= state.customer.x + 220 && y >= state.customer.y - 44 && y <= state.customer.y + 36) { executeSmartStep(); return; }
+        for (const s of STATIONS) {
+          if (s.id !== 'watering_can' && Math.abs(x - s.x) <= s.width / 2 + 6 && Math.abs(y - s.y) <= s.height / 2 + 6) {
+            triggerStation(s.id); return;
+          }
+        }
+      } else {
+        if (Math.abs(x - GARDEN_DOOR.x) <= 64 && Math.abs(y - GARDEN_DOOR.y) <= 20) { toggleRoom(); return; }
+        if (Math.abs(x - ORDER_WIN.x) <= 80 && Math.abs(y - ORDER_WIN.y) <= 26) { executeSmartStep(); return; }
+        for (const d of state.daisies) {
+          if (Math.abs(x - d.x) <= 54 && Math.abs(y - d.y) <= 34) { waterDaisy(d); return; }
         }
       }
-      state.barista.targetX = Math.max(170, Math.min(600, wx));
-      state.barista.targetY = Math.max(182, Math.min(400, wy));
+      state.barista.tx = Math.max(70, Math.min(830, x));
+      state.barista.ty = Math.max(140, Math.min(430, y));
     });
+
+    function drawBox(x, y, w, h, fill, border = '#090b0e') {
+      ctx.fillStyle = fill;
+      ctx.fillRect(Math.round(x), Math.round(y), Math.round(w), Math.round(h));
+      ctx.strokeStyle = border;
+      ctx.lineWidth = 2;
+      ctx.strokeRect(Math.round(x) + 1, Math.round(y) + 1, Math.round(w) - 2, Math.round(h) - 2);
+    }
 
     let last = performance.now();
     function loop(now) {
       const dt = Math.min(0.05, (now - last) / 1000);
-      const t = now / 1000;
       last = now;
+      const t = now / 1000;
 
-      // Smooth Camera View Interpolation
-      const tZoom = state.viewMode === 'indoor' ? 1.24 : state.viewMode === 'outdoor' ? 1.22 : 1.0;
-      const tFx = state.viewMode === 'indoor' ? 508 : 450;
-      const tFy = state.viewMode === 'indoor' ? 196 : state.viewMode === 'outdoor' ? 332 : 240;
-      state.cam.zoom += (tZoom - state.cam.zoom) * Math.min(1, dt * 8);
-      state.cam.fx += (tFx - state.cam.fx) * Math.min(1, dt * 8);
-      state.cam.fy += (tFy - state.cam.fy) * Math.min(1, dt * 8);
-
-      if (state.timer > 0) {
-        state.timer = Math.max(0, state.timer - dt);
-        if (state.timer === 0) {
-          state.step = Math.min(3, state.step + 1);
-          state.busyStation = null;
-          syncHud(state.step === 3 ? 'Drink READY! Tap ⚡ Smart Step or [Enter] to serve.' : 'Step ' + state.step + '/3 complete!');
+      if (bgmEnabled && !sfxMuted) {
+        bgmTimer += dt;
+        if (bgmTimer >= 0.2) {
+          bgmTimer -= 0.2;
+          playTone(BGM_NOTES[bgmStep % BGM_NOTES.length], 0.16, 'square', 0.02);
+          bgmStep++;
         }
       }
 
-      // Dynamic Daisy Hydration Decay (~1.2% per sec)
-      DAISIES.forEach(d => {
-        d.hydration = Math.max(15, d.hydration - 1.2 * dt);
-        d.needsWater = d.hydration <= 55;
-      });
+      if (state.mode === 'playing') {
+        state.barista.x += (state.barista.tx - state.barista.x) * Math.min(1, dt * 8);
+        state.barista.y += (state.barista.ty - state.barista.y) * Math.min(1, dt * 8);
 
-      // Smooth Multi-State Cats (Zero Teleportation)
-      CATS.forEach(c => {
-        if (c.heartTimer > 0) c.heartTimer = Math.max(0, c.heartTimer - dt);
-        if (c.state === 'walking') {
-          const dx = c.tx - c.x, dy = c.ty - c.y, dist = Math.hypot(dx, dy);
-          if (dist > 2) {
-            c.x += (dx / dist) * 45 * dt; c.y += (dy / dist) * 45 * dt;
-          } else {
-            c.state = c.id === 'lilo' && c.tx > 680 ? 'napping' : 'grooming';
-            c.timer = 4.5;
+        if (state.prep.procStation) {
+          state.prep.timer -= dt;
+          if (state.prep.timer <= 0) {
+            state.prep.procStation = null;
+            state.prep.step = Math.min(3, state.prep.step + 1);
+            playTone(659.25, 0.1);
+            syncHud();
           }
-        } else {
-          c.timer -= dt;
-          if (c.timer <= 0) {
-            c.state = 'walking';
-            if (c.id === 'lilo') {
-              const onCar = c.x > 660;
-              c.tx = onCar ? 556 : 742;
-              c.ty = onCar ? 222 : 268;
-            } else {
-              const pts = [[256, 356], [184, 404], [508, 364]];
-              const p = pts[Math.floor(Math.random() * pts.length)];
-              c.tx = p[0]; c.ty = p[1];
+        }
+
+        state.daisies.forEach(d => {
+          if (state.weather === 'rain') {
+            d.hydration = Math.min(100, d.hydration + 4.0 * dt);
+          } else {
+            d.hydration = Math.max(15, d.hydration - 1.15 * dt);
+          }
+          d.needsWater = d.hydration <= 55;
+        });
+
+        for (let i = state.popups.length - 1; i >= 0; i--) {
+          state.popups[i].life -= dt;
+          state.popups[i].y -= 22 * dt;
+          if (state.popups[i].life <= 0) state.popups.splice(i, 1);
+        }
+      }
+
+      ctx.fillStyle = '#0b0d12';
+      ctx.fillRect(0, 0, 900, 480);
+
+      if (state.room === 'inside') {
+        drawBox(16, 14, 868, 452, '#0f172a', '#f8fafc');
+        for (let r = 0; r < 14; r++) {
+          for (let c = 0; c < 20; c++) {
+            const tx = 26 + c * 28, ty = 84 + r * 28;
+            if (tx < 584 && ty < 456) {
+              ctx.fillStyle = (r + c) % 2 === 0 ? '#262e3d' : '#1b2230';
+              ctx.fillRect(tx, ty, 28, 28);
             }
           }
         }
-      });
+        drawBox(24, 20, 558, 64, '#111622');
+        const sky = state.timeOfDay === 'day' ? '#38bdf8' : state.timeOfDay === 'sunset' ? '#f97316' : '#0f172a';
+        drawBox(44, 26, 184, 50, sky, '#f8fafc');
+        drawBox(244, 28, 154, 44, '#1e293b', '#f8fafc');
+        drawBox(410, 28, 158, 44, '#1e293b', '#f8fafc');
+        drawBox(68, 116, 472, 46, '#0f172a');
+        drawBox(68, 218, 360, 38, '#0f172a');
+        drawBox(84, 210, 58, 34, '#1e293b', '#94a3b8'); // POS Register
+        drawBox(162, 210, 112, 36, '#38bdf8', '#bae6fd'); // Glass Pastry Case
 
-      state.barista.x += (state.barista.targetX - state.barista.x) * Math.min(1, dt * 8);
-      state.barista.y += (state.barista.targetY - state.barista.y) * Math.min(1, dt * 8);
-
-      ctx.save();
-      ctx.fillStyle = '#0b0d12';
-      ctx.fillRect(0, 0, 900, 480);
-      ctx.translate(450, 240);
-      ctx.scale(state.cam.zoom, state.cam.zoom);
-      ctx.translate(-state.cam.fx, -state.cam.fy);
-
-      // 1. Outdoor Daisy Garden Grass & Stone Walkway
-      for (let r = 0; r < 15; r++) {
-        for (let c = 0; c < 29; c++) {
-          ctx.fillStyle = (r + c) % 2 === 0 ? '#4ade80' : '#22c55e';
-          ctx.fillRect(c * 32, r * 32, 32, 32);
-        }
-      }
-      [456, 422, 388, 352, 318].forEach(sy => drawPixelBox(336, sy - 11, 112, 22, '#cbd5e1', '#090b0e', '#f8fafc'));
-
-      // 2. Indoor Monochrome Coffee Shop Building (Enclosed Walls + Checkerboard Floor + KLASIK Mat)
-      drawPixelBox(152, 76, 484, 220, '#0f172a', '#090b0e', '#334155');
-      for (let r = 0; r < 8; r++) {
-        for (let c = 0; c < 19; c++) {
-          ctx.fillStyle = (r + c) % 2 === 0 ? '#262d3d' : '#1b202c';
-          ctx.fillRect(160 + c * 24, 102 + r * 22, 24, 22);
-        }
-      }
-      drawPixelBox(344, 278, 96, 20, '#18181b', '#f8fafc');
-
-      // 3. Partitioned Indoor Garage Bay & 1990 Mazda Miata MX-5
-      drawPixelBox(636, 76, 228, 292, '#18181b', '#090b0e', '#3f3f46');
-      for (let r = 0; r < 10; r++) {
-        for (let c = 0; c < 8; c++) {
-          ctx.fillStyle = (r + c) % 2 === 0 ? '#e2e8f0' : '#1e232d';
-          ctx.fillRect(654 + c * 24, 112 + r * 24, 24, 24);
-        }
-      }
-      drawPixelBox(698, 166, 88, 152, '#f8fafc', '#090b0e', '#ffffff');
-      drawPixelBox(710, 198, 64, 48, '#0f172a', '#090b0e');
-      if (state.miataLights) {
-        drawPixelBox(710, 290, 18, 14, '#1e293b', '#090b0e');
-        drawPixelBox(756, 290, 18, 14, '#1e293b', '#090b0e');
-        ctx.fillStyle = 'rgba(254, 240, 138, 0.28)';
-        ctx.fillRect(702, 304, 80, 60);
-      }
-
-      // 4. Cafe Signboard
-      drawPixelBox(228, 30, 556, 34, '#090b0e', '#f8fafc', '#334155');
-      ctx.font = 'bold 13px "Press Start 2P", monospace';
-      ctx.textAlign = 'center';
-      ctx.fillStyle = '#facc15';
-      ctx.fillText('KLASIK - GARDEN GARAGE CAFE ★', 506, 53);
-
-      // 5. Daisy Planters
-      DAISIES.forEach(d => {
-        drawPixelBox(d.x - 44, d.y - 28, 88, 56, '#1e293b', d.needsWater ? '#38bdf8' : '#090b0e', '#475569');
-        ctx.fillStyle = d.needsWater ? '#3f6212' : '#16a34a';
-        ctx.fillRect(d.x - 36, d.y - 20, 72, 36);
-        ctx.fillStyle = '#ffffff'; ctx.fillRect(d.x - 20, d.y - 8, 12, 12); ctx.fillRect(d.x + 8, d.y - 8, 12, 12);
-        ctx.fillStyle = '#eab308'; ctx.fillRect(d.x - 16, d.y - 4, 4, 4); ctx.fillRect(d.x + 12, d.y - 4, 4, 4);
-      });
-
-      // 6. Stations + Bouncing ▼ NEXT Indicator + Progress Bars
-      const recSt = state.busyStation ? null : getRecommendedStation();
-      STATIONS.forEach(s => {
-        const isNext = s.id === recSt;
-        drawPixelBox(s.x - s.w/2, s.y - s.h/2, s.w, s.h, isNext ? '#26334d' : '#1e293b', isNext ? '#facc15' : '#090b0e', '#475569');
-        if (state.busyStation === s.id && state.timer > 0) {
-          const pct = 1 - state.timer / state.maxTimer;
-          drawPixelBox(s.x - 28, s.y - s.h/2 - 18, 56, 10, '#090b0e', '#ffffff');
-          ctx.fillStyle = '#22c55e';
-          ctx.fillRect(s.x - 26, s.y - s.h/2 - 16, Math.round(52 * pct), 6);
-        } else if (isNext) {
-          const bob = Math.round(Math.sin(t * 9) * 3);
-          drawPixelBox(s.x - 26, s.y - s.h/2 - 22 + bob, 52, 13, '#facc15', '#090b0e');
-          ctx.font = 'bold 7px "Press Start 2P", monospace';
+        const nextSt = state.prep.procStation === null ? getRecommendedStation() : null;
+        STATIONS.filter(s => s.id !== 'watering_can').forEach(s => {
+          const isNext = s.id === nextSt;
+          drawBox(s.x - s.width / 2, s.y - s.height / 2, s.width, s.height, '#1e293b', isNext ? '#facc15' : '#090b0e');
           ctx.fillStyle = '#090b0e';
-          ctx.fillText('▼ NEXT', s.x, s.y - s.h/2 - 13 + bob);
-        }
-      });
+          ctx.fillRect(s.x - 28, s.y + 16, 56, 11);
+          ctx.fillStyle = isNext ? '#facc15' : '#f8fafc';
+          ctx.font = 'bold 6px "Press Start 2P"';
+          ctx.textAlign = 'center';
+          ctx.fillText('[' + s.key + '] ' + s.shortLabel.toUpperCase(), s.x, s.y + 24);
+        });
 
-      // 7. Characters & Multi-State Cats
-      drawSpriteMatrix(ctx, CHIBI_MATRIX, { O:'#090b0e', H:'#18181b', h:'#3f3f46', B:'#f8fafc', S:'#fde68a', E:'#090b0e', C:'#fb7185', T:'#f8fafc', A:'#1e293b', W:'#facc15', P:'#0f172a', F:'#090b0e' }, state.barista.x, state.barista.y, 2);
-      drawSpriteMatrix(ctx, CHIBI_MATRIX, { O:'#090b0e', H:'#7c2d12', h:'#9a3412', B:'#f43f5e', S:'#ffedd5', E:'#090b0e', C:'#fb7185', T:'#f8fafc', A:'#1e293b', W:'#f8fafc', P:'#1e293b', F:'#090b0e' }, state.customer.x, state.customer.y, 2);
-      CATS.forEach(c => {
-        const mat = c.state === 'napping' ? CAT_SLEEP : c.state === 'grooming' ? CAT_GROOM : CAT_WALK_0;
-        drawSpriteMatrix(ctx, mat, { O:'#090b0e', B:c.coat, b:c.coat, S:'#fda4af', E:c.eye, C:c.collar, G:'#facc15' }, c.x, c.y, 2);
-        if (c.state === 'napping') {
-          ctx.font = 'bold 8px "Press Start 2P", monospace';
-          ctx.fillStyle = '#f8fafc';
-          ctx.fillText('Zzz', c.x + 16, c.y - 14);
-        }
-      });
+        INDOOR_TABLES.forEach(tb => drawBox(tb.x - 24, tb.y - 18, 48, 28, '#f8fafc'));
+        drawBox(INSIDE_DOOR.x - 60, INSIDE_DOOR.y - 17, 120, 34, '#14532d', '#facc15');
+        ctx.fillStyle = '#fef08a';
+        ctx.fillText('▼ TO GARDEN [V]', INSIDE_DOOR.x, INSIDE_DOOR.y + 4);
 
-      // 8. Floating Popups
-      for (let i = state.popups.length - 1; i >= 0; i--) {
-        const p = state.popups[i];
-        p.life -= dt; p.y -= 24 * dt;
-        if (p.life <= 0) { state.popups.splice(i, 1); continue; }
-        ctx.font = 'bold 9px "Press Start 2P", monospace';
-        ctx.fillStyle = p.color;
-        ctx.fillText(p.text, p.x, p.y);
+        // Right-Wing 1990 Miata Garage Showroom
+        drawBox(588, 20, 288, 436, '#18181b');
+        for (let r = 0; r < 12; r++) {
+          for (let c = 0; c < 9; c++) {
+            ctx.fillStyle = (r + c) % 2 === 0 ? '#e2e8f0' : '#1e232d';
+            ctx.fillRect(606 + c * 28, 88 + r * 28, 28, 28);
+          }
+        }
+        drawBox(MIATA_BOUNDS.x - 46, MIATA_BOUNDS.y - 78, 92, 156, '#f8fafc');
+        drawBox(MIATA_BOUNDS.x - 34, MIATA_BOUNDS.y - 46, 68, 48, '#0f172a');
+        if (state.miataHeadlightsOn) {
+          ctx.fillStyle = '#fef08a';
+          ctx.fillRect(MIATA_BOUNDS.x - 32, MIATA_BOUNDS.y + 58, 16, 8);
+          ctx.fillRect(MIATA_BOUNDS.x + 16, MIATA_BOUNDS.y + 58, 16, 8);
+        }
+
+        // Waiting Customer
+        drawBox(state.customer.x - 14, state.customer.y - 18, 28, 34, '#fb7185');
+        drawBox(state.customer.x + 24, state.customer.y - 28, 185, 44, '#f8fafc');
+        ctx.fillStyle = '#090b0e';
+        ctx.font = 'bold 8px "Press Start 2P"';
+        ctx.textAlign = 'left';
+        ctx.fillText(RECIPES[state.customer.order].shortName.toUpperCase(), state.customer.x + 34, state.customer.y - 10);
+      } else {
+        // GARDEN ROOM
+        for (let r = 0; r < 15; r++) {
+          for (let c = 0; c < 29; c++) {
+            ctx.fillStyle = (r + c) % 2 === 0 ? '#22c55e' : '#16a34a';
+            ctx.fillRect(c * 32, r * 32, 32, 32);
+          }
+        }
+        drawBox(40, 14, 820, 98, '#0f172a');
+        drawBox(ORDER_WIN.x - 78, ORDER_WIN.y - 24, 156, 48, '#f8fafc', '#facc15');
+        ctx.fillStyle = '#090b0e';
+        ctx.font = 'bold 6px "Press Start 2P"';
+        ctx.textAlign = 'center';
+        ctx.fillText(state.customer.name.toUpperCase() + ': ' + RECIPES[state.customer.order].shortName.toUpperCase(), ORDER_WIN.x, ORDER_WIN.y);
+        drawBox(GARDEN_DOOR.x - 60, GARDEN_DOOR.y - 17, 120, 34, '#18181b', '#facc15');
+        ctx.fillStyle = '#fef08a';
+        ctx.fillText('▲ TO CAFE [V]', GARDEN_DOOR.x, GARDEN_DOOR.y + 4);
+        drawBox(416, 232, 68, 46, '#0284c7'); // Center Watering Well
+        GARDEN_TABLES.forEach(tb => drawBox(tb.x - 26, tb.y - 18, 52, 30, '#f8fafc'));
+        state.daisies.forEach(d => {
+          drawBox(d.x - 52, d.y - 31, 104, 62, '#1e293b');
+          ctx.fillStyle = d.needsWater ? '#4d7c0f' : '#22c55e';
+          ctx.fillRect(d.x - 38, d.y - 19, 76, 36);
+        });
       }
 
-      ctx.restore();
+      // Barista & Room Cat
+      drawBox(state.barista.x - 14, state.barista.y - 18, 28, 34, '#38bdf8');
+      state.cats.filter(c => c.room === state.room).forEach(cat => {
+        drawBox(cat.x - 12, cat.y - 10, 24, 18, cat.coat === 'white' ? '#ffffff' : '#18181b');
+      });
+
+      // Ambient Time Overlay
+      if (state.timeOfDay !== 'day') {
+        ctx.fillStyle = state.timeOfDay === 'night' ? 'rgba(10, 15, 34, 0.42)' : 'rgba(234, 88, 12, 0.16)';
+        ctx.fillRect(0, 0, 900, 480);
+      }
+
       requestAnimationFrame(loop);
     }
-    syncHud();
     requestAnimationFrame(loop);
   </script>
 </body>

@@ -1,5 +1,12 @@
 import React from 'react';
-import { DrinkId, RECIPES, StationId, ViewMode } from '../game/rules';
+import {
+  DrinkId,
+  RECIPES,
+  StationId,
+  RoomId,
+  TimeOfDay,
+  WeatherType,
+} from '../game/rules';
 
 export interface HudSnapshot {
   cozyRating: number;
@@ -19,7 +26,9 @@ export interface HudSnapshot {
   lastMessage: string;
   muted: boolean;
   bgmEnabled: boolean;
-  viewMode: ViewMode;
+  room: RoomId;
+  timeOfDay: TimeOfDay;
+  weather: WeatherType;
 }
 
 interface TopHudBarProps {
@@ -28,7 +37,9 @@ interface TopHudBarProps {
   onToggleDock: () => void;
   onToggleBgm: () => void;
   onToggleMute: () => void;
-  onCycleViewMode: () => void;
+  onToggleRoom: () => void;
+  onCycleTimeOfDay: () => void;
+  onCycleWeather: () => void;
   onPause: () => void;
   onRestart: () => void;
   onOpenCodeModal: () => void;
@@ -41,68 +52,82 @@ export const TopHudBar: React.FC<TopHudBarProps> = ({
   onToggleDock,
   onToggleBgm,
   onToggleMute,
-  onCycleViewMode,
+  onToggleRoom,
+  onCycleTimeOfDay,
+  onCycleWeather,
   onPause,
   onRestart,
   onOpenCodeModal,
   onFinishShift,
 }) => {
   const orderRecipe = hud.waitingCustomerOrder ? RECIPES[hud.waitingCustomerOrder] : null;
-  const viewLabels: Record<ViewMode, string> = {
-    all: 'ALL',
-    indoor: 'INDOOR',
-    outdoor: 'GARDEN',
+
+  const roomLabels: Record<RoomId, string> = {
+    inside: '🚪 INSIDE',
+    garden: '🚪 GARDEN',
+  };
+
+  const timeLabels: Record<TimeOfDay, string> = {
+    day: '☀️ DAY',
+    sunset: '🌅 SUNSET',
+    night: '🌙 NIGHT',
+  };
+
+  const weatherLabels: Record<WeatherType, string> = {
+    clear: '⛅ CLEAR',
+    breeze: '🍃 BREEZE',
+    rain: '🌧️ RAIN',
   };
 
   return (
-    <header className="w-full bg-[#0b0d12] border-b-[3px] border-[#f8fafc] px-2 py-1.5 shrink-0 flex items-center justify-between gap-2 overflow-x-auto no-scrollbar">
-      {/* Compact Single-Row GBA Stat Strip (Never wraps into bulky multi-row blocks) */}
-      <div className="gba-frame px-2.5 py-1 flex items-center gap-3 shrink-0">
+    <header className="w-full bg-[#0b0d12] border-b-[3px] border-[#f8fafc] px-2 py-1 shrink-0 flex flex-wrap items-center justify-between gap-1.5 overflow-x-hidden">
+      {/* Compact GBA Stat Strip */}
+      <div className="gba-frame px-2 py-1 flex flex-wrap items-center gap-2 shrink-0">
         {/* Cozy Rating */}
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1">
           <span className="text-[8px] font-['Press_Start_2P'] text-[#94a3b8]">COZY</span>
           <span
             data-testid="hud-cozy-rating"
-            className="text-xs sm:text-sm font-['Press_Start_2P'] text-[#f8fafc] tabular-nums"
+            className="text-xs font-['Press_Start_2P'] text-[#f8fafc] tabular-nums"
           >
             {Math.round(hud.cozyRating)}%
           </span>
         </div>
 
-        <div className="w-[2px] h-5 bg-[#334155]" />
+        <div className="w-[2px] h-4 bg-[#334155]" />
 
         {/* Hearts */}
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1">
           <span className="text-[8px] font-['Press_Start_2P'] text-[#fb7185]">♥</span>
           <span
             data-testid="hud-hearts"
-            className="text-xs sm:text-sm font-['Press_Start_2P'] text-[#fb7185] tabular-nums"
+            className="text-xs font-['Press_Start_2P'] text-[#fb7185] tabular-nums"
           >
             {Math.round(hud.hearts)}
           </span>
         </div>
 
-        <div className="w-[2px] h-5 bg-[#334155]" />
+        <div className="w-[2px] h-4 bg-[#334155]" />
 
         {/* Served */}
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1">
           <span className="text-[8px] font-['Press_Start_2P'] text-[#94a3b8]">SRV</span>
           <span
             data-testid="hud-served"
-            className="text-xs sm:text-sm font-['Press_Start_2P'] text-[#f8fafc] tabular-nums"
+            className="text-xs font-['Press_Start_2P'] text-[#f8fafc] tabular-nums"
           >
             {Math.round(hud.servedCount)}/{Math.round(hud.dailyTarget)}
           </span>
         </div>
 
-        <div className="w-[2px] h-5 bg-[#334155]" />
+        <div className="w-[2px] h-4 bg-[#334155]" />
 
         {/* Coins */}
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1">
           <span className="text-[8px] font-['Press_Start_2P'] text-[#facc15]">$</span>
           <span
             data-testid="hud-coins"
-            className="text-xs sm:text-sm font-['Press_Start_2P'] text-[#facc15] tabular-nums"
+            className="text-xs font-['Press_Start_2P'] text-[#facc15] tabular-nums"
           >
             {Math.round(hud.coins)}
           </span>
@@ -115,7 +140,7 @@ export const TopHudBar: React.FC<TopHudBarProps> = ({
               e.currentTarget.blur();
               onFinishShift();
             }}
-            className="gba-btn gba-btn-active px-2 py-1 text-[8px] cursor-pointer whitespace-nowrap shrink-0"
+            className="gba-btn gba-btn-active px-2 py-0.5 text-[8px] cursor-pointer whitespace-nowrap shrink-0"
           >
             FINISH ★
           </button>
@@ -123,7 +148,7 @@ export const TopHudBar: React.FC<TopHudBarProps> = ({
       </div>
 
       {/* Center Classic Pokémon GBA White/Charcoal Dialogue & Recipe Guide Box */}
-      <div className="gba-dialogue-box px-3 py-1 flex-1 min-w-[210px] max-w-xl hidden lg:flex items-center justify-between gap-2">
+      <div className="gba-dialogue-box px-2.5 py-1 flex-1 min-w-[190px] max-w-md hidden xl:flex items-center justify-between gap-2">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <span className="text-[8px] font-['Press_Start_2P'] text-[#0f172a] uppercase truncate">
@@ -152,8 +177,58 @@ export const TopHudBar: React.FC<TopHudBarProps> = ({
         </span>
       </div>
 
-      {/* Right Audio, View Mode, Collapsible Dock & Utility Controls */}
-      <div className="gba-frame px-2 py-1 flex items-center gap-1.5 shrink-0">
+      {/* Right Room, Time, Weather, Audio & Utility Controls (Wraps cleanly without horizontal scroll) */}
+      <div className="gba-frame px-1.5 py-1 flex flex-wrap items-center gap-1 shrink-0">
+        {/* Room Map Switcher [V] */}
+        <button
+          type="button"
+          tabIndex={-1}
+          data-testid="hud-room-btn"
+          aria-label="Switch Room Map (INSIDE / GARDEN) [V]"
+          title="Switch Room Map (INSIDE / GARDEN) [V]"
+          onClick={(e) => {
+            e.currentTarget.blur();
+            onToggleRoom();
+          }}
+          className="gba-btn px-2 h-6 flex items-center justify-center text-[#7dd3fc] cursor-pointer whitespace-nowrap"
+        >
+          <span className="text-[8px]">{roomLabels[hud.room]}</span>
+        </button>
+
+        {/* Time of Day Cycle [T] */}
+        <button
+          type="button"
+          tabIndex={-1}
+          data-testid="hud-time-btn"
+          aria-label="Cycle Time of Day (DAY / SUNSET / NIGHT) [T]"
+          title="Cycle Time of Day (DAY / SUNSET / NIGHT) [T]"
+          onClick={(e) => {
+            e.currentTarget.blur();
+            onCycleTimeOfDay();
+          }}
+          className="gba-btn px-2 h-6 flex items-center justify-center text-[#fde047] cursor-pointer whitespace-nowrap"
+        >
+          <span className="text-[8px]">{timeLabels[hud.timeOfDay]}</span>
+        </button>
+
+        {/* Weather Cycle [G] */}
+        <button
+          type="button"
+          tabIndex={-1}
+          data-testid="hud-weather-btn"
+          aria-label="Cycle Weather (CLEAR / BREEZE / RAIN) [G]"
+          title="Cycle Weather (CLEAR / BREEZE / RAIN) [G]"
+          onClick={(e) => {
+            e.currentTarget.blur();
+            onCycleWeather();
+          }}
+          className={`gba-btn px-2 h-6 flex items-center justify-center cursor-pointer whitespace-nowrap ${
+            hud.weather === 'rain' ? 'gba-btn-active' : 'text-[#86efac]'
+          }`}
+        >
+          <span className="text-[8px]">{weatherLabels[hud.weather]}</span>
+        </button>
+
         {/* 8-Bit Mono Chiptune BGM Toggle */}
         <button
           type="button"
@@ -164,7 +239,7 @@ export const TopHudBar: React.FC<TopHudBarProps> = ({
             e.currentTarget.blur();
             onToggleBgm();
           }}
-          className={`gba-btn px-2 h-7 flex items-center justify-center cursor-pointer whitespace-nowrap ${
+          className={`gba-btn px-1.5 h-6 flex items-center justify-center cursor-pointer whitespace-nowrap ${
             hud.bgmEnabled ? 'gba-btn-active' : ''
           }`}
         >
@@ -181,24 +256,9 @@ export const TopHudBar: React.FC<TopHudBarProps> = ({
             e.currentTarget.blur();
             onToggleMute();
           }}
-          className="gba-btn px-2 h-7 flex items-center justify-center cursor-pointer whitespace-nowrap"
+          className="gba-btn px-1.5 h-6 flex items-center justify-center cursor-pointer whitespace-nowrap"
         >
           <span className="text-[8px]">🔊 SFX:{hud.muted ? 'OFF' : 'ON'}</span>
-        </button>
-
-        {/* Camera View Mode Toggle */}
-        <button
-          type="button"
-          tabIndex={-1}
-          aria-label="Cycle Camera View Mode [V]"
-          title="Cycle Camera View Mode (ALL / INDOOR / OUTDOOR) [V]"
-          onClick={(e) => {
-            e.currentTarget.blur();
-            onCycleViewMode();
-          }}
-          className="gba-btn px-2 h-7 flex items-center justify-center text-[#7dd3fc] cursor-pointer whitespace-nowrap"
-        >
-          <span className="text-[8px]">🏠 {viewLabels[hud.viewMode]}</span>
         </button>
 
         {/* Collapsible Bottom Action Dock Toggle */}
@@ -211,11 +271,9 @@ export const TopHudBar: React.FC<TopHudBarProps> = ({
             e.currentTarget.blur();
             onToggleDock();
           }}
-          className="gba-btn px-2 h-7 flex items-center justify-center text-[#facc15] cursor-pointer whitespace-nowrap"
+          className="gba-btn px-1.5 h-6 flex items-center justify-center text-[#facc15] cursor-pointer whitespace-nowrap"
         >
-          <span className="text-[8px]">
-            {dockCollapsed ? '▲ RECIPES & CONTROLS' : '▼ HIDE DOCK'}
-          </span>
+          <span className="text-[8px]">{dockCollapsed ? '▲ DOCK' : '▼ DOCK'}</span>
         </button>
 
         {/* Single-File HTML Export Modal */}
@@ -228,7 +286,7 @@ export const TopHudBar: React.FC<TopHudBarProps> = ({
             e.currentTarget.blur();
             onOpenCodeModal();
           }}
-          className="gba-btn px-2 h-7 flex items-center justify-center text-[#86efac] cursor-pointer"
+          className="gba-btn px-1.5 h-6 flex items-center justify-center text-[#86efac] cursor-pointer"
         >
           <span className="text-[8px]">HTML</span>
         </button>
@@ -243,7 +301,7 @@ export const TopHudBar: React.FC<TopHudBarProps> = ({
             e.currentTarget.blur();
             onPause();
           }}
-          className="gba-btn w-7 h-7 flex items-center justify-center cursor-pointer"
+          className="gba-btn w-6 h-6 flex items-center justify-center cursor-pointer"
         >
           <span className="text-[8px]">II</span>
         </button>
@@ -258,7 +316,7 @@ export const TopHudBar: React.FC<TopHudBarProps> = ({
             e.currentTarget.blur();
             onRestart();
           }}
-          className="gba-btn px-1.5 h-7 hidden sm:flex items-center justify-center cursor-pointer"
+          className="gba-btn px-1.5 h-6 hidden sm:flex items-center justify-center cursor-pointer"
         >
           <span className="text-[8px]">RST</span>
         </button>
@@ -272,7 +330,7 @@ interface FloatingCanvasQuickBarProps {
   onSmartStep: () => void;
   onWaterNextDaisy: () => void;
   onPetCats: () => void;
-  onCycleViewMode: () => void;
+  onToggleRoom: () => void;
 }
 
 /**
@@ -284,14 +342,9 @@ export const FloatingCanvasQuickBar: React.FC<FloatingCanvasQuickBarProps> = ({
   onSmartStep,
   onWaterNextDaisy,
   onPetCats,
-  onCycleViewMode,
+  onToggleRoom,
 }) => {
   const orderRecipe = hud.waitingCustomerOrder ? RECIPES[hud.waitingCustomerOrder] : null;
-  const viewNames: Record<ViewMode, string> = {
-    all: 'ALL LOT',
-    indoor: 'INDOOR',
-    outdoor: 'GARDEN',
-  };
 
   let smartLabel = '⚡ Smart Step';
   if (hud.currentStepIndex === 3) {
@@ -350,11 +403,11 @@ export const FloatingCanvasQuickBar: React.FC<FloatingCanvasQuickBarProps> = ({
         type="button"
         onClick={(e) => {
           e.currentTarget.blur();
-          onCycleViewMode();
+          onToggleRoom();
         }}
         className="gba-btn px-2 py-1.5 text-[9px] text-[#facc15] cursor-pointer shadow-lg"
       >
-        🏠 View: {viewNames[hud.viewMode]}
+        🚪 Room: {hud.room === 'inside' ? 'INSIDE' : 'GARDEN'}
       </button>
     </div>
   );
@@ -392,7 +445,7 @@ export const BottomActionDock: React.FC<BottomActionDockProps> = ({
   }
 
   return (
-    <footer className="w-full bg-[#0b0d12] border-t-[3px] border-[#f8fafc] px-1.5 py-1 shrink-0 flex flex-nowrap items-center justify-start xl:justify-center gap-1 overflow-x-auto no-scrollbar">
+    <footer className="w-full bg-[#0b0d12] border-t-[3px] border-[#f8fafc] px-1.5 py-1 shrink-0 flex flex-wrap items-center justify-center gap-1 overflow-x-hidden">
       <StationDockButton
         label="Grinder"
         roleClue="Step 1 · Coffee"
@@ -448,7 +501,7 @@ export const BottomActionDock: React.FC<BottomActionDockProps> = ({
           e.currentTarget.blur();
           onServeCustomer();
         }}
-        className={`gba-btn px-2 py-1 text-left cursor-pointer whitespace-nowrap shrink-0 ${
+        className={`gba-btn px-1.5 py-0.5 text-left cursor-pointer whitespace-nowrap shrink-0 ${
           hud.currentStepIndex === 3 ? 'gba-btn-active' : ''
         }`}
       >
@@ -472,16 +525,18 @@ export const BottomActionDock: React.FC<BottomActionDockProps> = ({
           e.currentTarget.blur();
           onWaterNextDaisy();
         }}
-        className="gba-btn px-2 py-1 text-left cursor-pointer whitespace-nowrap shrink-0"
+        className="gba-btn px-1.5 py-0.5 text-left cursor-pointer whitespace-nowrap shrink-0"
       >
         <div className="flex items-center gap-1">
           <span className="gba-keycap">W</span>
           <span className="text-[8px]">Water Daisies</span>
         </div>
         <div className="text-sm font-['VT323'] leading-none mt-0.5 text-[#7dd3fc] tabular-nums">
-          {hud.thirstyDaisyCount > 0
-            ? `${Math.round(hud.thirstyDaisyCount)} thirsty · +2c`
-            : 'Hydrate Beds'}
+          {hud.weather === 'rain'
+            ? '🌧️ Rain Hydrating!'
+            : hud.thirstyDaisyCount > 0
+              ? `${Math.round(hud.thirstyDaisyCount)} thirsty · +2c`
+              : '6 Beds Hydrated'}
         </div>
       </button>
 
@@ -492,7 +547,7 @@ export const BottomActionDock: React.FC<BottomActionDockProps> = ({
           e.currentTarget.blur();
           onToggleMiataHeadlights();
         }}
-        className="gba-btn px-2 py-1 text-left cursor-pointer whitespace-nowrap shrink-0"
+        className="gba-btn px-1.5 py-0.5 text-left cursor-pointer whitespace-nowrap shrink-0"
       >
         <div className="flex items-center gap-1">
           <span className="gba-keycap">H</span>
@@ -510,7 +565,7 @@ export const BottomActionDock: React.FC<BottomActionDockProps> = ({
           e.currentTarget.blur();
           onPetCats();
         }}
-        className="gba-btn px-2 py-1 text-left cursor-pointer whitespace-nowrap shrink-0"
+        className="gba-btn px-1.5 py-0.5 text-left cursor-pointer whitespace-nowrap shrink-0"
       >
         <div className="flex items-center gap-1">
           <span className="gba-keycap">C</span>
@@ -546,7 +601,7 @@ const StationDockButton: React.FC<StationDockButtonProps> = ({
         e.currentTarget.blur();
         onClick();
       }}
-      className={`gba-btn px-1.5 py-1 text-left cursor-pointer whitespace-nowrap shrink-0 ${
+      className={`gba-btn px-1.5 py-0.5 text-left cursor-pointer whitespace-nowrap shrink-0 ${
         isRecommended ? 'gba-btn-active' : ''
       }`}
     >

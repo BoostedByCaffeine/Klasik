@@ -5,8 +5,12 @@ import {
   STATIONS,
   RECIPES,
   MIATA_GARAGE_BOUNDS,
+  INSIDE_DOOR_MAT,
+  GARDEN_DOOR_MAT,
+  GARDEN_ORDER_WINDOW,
   DrinkId,
   StationId,
+  RoomId,
   NPC_NAMES,
   interactWithStation,
   advancePrepTimer,
@@ -14,18 +18,17 @@ import {
   waterDaisyPatch,
   toggleMiataHeadlights,
   petCatCompanion,
-  calculateCozyRating,
   executeSmartStep,
-  cycleViewMode,
+  toggleRoom,
+  cycleTimeOfDay,
+  cycleWeather,
+  advanceEnvironmentAndHydration,
 } from './game/rules';
 import {
   ParticlePool,
   renderCafeWorld,
   WORLD_WIDTH,
   WORLD_HEIGHT,
-  CameraTransform,
-  getTargetCamera,
-  screenToWorldWithCamera,
 } from './game/pixelArt';
 import { soundEngine } from './game/sound';
 import { TitleScreen } from './components/TitleScreen';
@@ -60,7 +63,9 @@ function makeHudSnapshot(state: CafeState): HudSnapshot {
     lastMessage: state.lastMessage,
     muted: soundEngine.muted,
     bgmEnabled: soundEngine.bgmEnabled,
-    viewMode: state.viewMode,
+    room: state.room,
+    timeOfDay: state.timeOfDay,
+    weather: state.weather,
   };
 }
 
@@ -72,11 +77,6 @@ export default function App() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const gameStateRef = useRef<CafeState>(createInitialCafeState(autostart));
   const particlesRef = useRef<ParticlePool>(new ParticlePool());
-  const cameraRef = useRef<CameraTransform>({
-    zoom: 1,
-    focusX: WORLD_WIDTH / 2,
-    focusY: WORLD_HEIGHT / 2,
-  });
   const hoveredStationRef = useRef<string | null>(null);
   const hoveredDaisyRef = useRef<string | null>(null);
   const hoveredMiataRef = useRef<boolean>(false);
@@ -119,7 +119,9 @@ export default function App() {
         prev.lastMessage === next.lastMessage &&
         prev.muted === next.muted &&
         prev.bgmEnabled === next.bgmEnabled &&
-        prev.viewMode === next.viewMode
+        prev.room === next.room &&
+        prev.timeOfDay === next.timeOfDay &&
+        prev.weather === next.weather
       ) {
         return prev;
       }
@@ -194,9 +196,10 @@ export default function App() {
       if (st.mode !== 'playing') return;
 
       const station = STATIONS.find((s) => s.id === stationId);
-      if (station) {
-        st.barista.targetX = Math.max(195, Math.min(590, station.x));
-        st.barista.targetY = 196;
+      if (station && stationId !== 'watering_can') {
+        st.room = 'inside';
+        st.barista.targetX = Math.max(90, Math.min(540, station.x));
+        st.barista.targetY = 192;
         st.barista.scaleX = 1.15;
         st.barista.scaleY = 0.86;
       }
@@ -207,7 +210,7 @@ export default function App() {
           soundEngine.playServeSuccess();
           hitstopTimerRef.current = 0.045;
           particlesRef.current.emitBurst('heart', serveRes.customer.x, serveRes.customer.y - 24, 14);
-          particlesRef.current.emitBurst('sparkle', 392, 234, 10);
+          particlesRef.current.emitBurst('sparkle', 356, 234, 10);
         }
         syncHudNow();
         return;
@@ -230,11 +233,12 @@ export default function App() {
   const handleServeCustomer = useCallback(() => {
     const st = gameStateRef.current;
     if (st.mode !== 'playing') return;
+    st.room = 'inside';
 
     const serveRes = serveWaitingCustomer(st);
     if (serveRes.served && serveRes.customer) {
-      st.barista.targetX = 392;
-      st.barista.targetY = 196;
+      st.barista.targetX = 356;
+      st.barista.targetY = 192;
       st.barista.scaleX = 0.86;
       st.barista.scaleY = 1.16;
       soundEngine.playServeSuccess();
@@ -254,16 +258,16 @@ export default function App() {
     if (res.type === 'station' && res.stationId) {
       const station = STATIONS.find((s) => s.id === res.stationId);
       if (station) {
-        st.barista.targetX = Math.max(195, Math.min(590, station.x));
-        st.barista.targetY = 196;
+        st.barista.targetX = Math.max(90, Math.min(540, station.x));
+        st.barista.targetY = 192;
         st.barista.scaleX = 1.15;
         st.barista.scaleY = 0.86;
         particlesRef.current.emitBurst('sparkle', station.x, station.y - 10, 6);
       }
       soundEngine.playStationStart(res.stationId);
     } else if (res.type === 'serve' && res.servedResult?.served && res.servedResult.customer) {
-      st.barista.targetX = 392;
-      st.barista.targetY = 196;
+      st.barista.targetX = 356;
+      st.barista.targetY = 192;
       st.barista.scaleX = 0.86;
       st.barista.scaleY = 1.16;
       soundEngine.playServeSuccess();
@@ -295,8 +299,6 @@ export default function App() {
 
       const watered = waterDaisyPatch(st, daisyId);
       if (watered) {
-        st.barista.targetX = patch.x < 400 ? 224 : 490;
-        st.barista.targetY = 196;
         st.barista.scaleX = 1.16;
         st.barista.scaleY = 0.85;
         soundEngine.playWaterDaisies();
@@ -344,9 +346,26 @@ export default function App() {
     [syncHudNow]
   );
 
-  const handleCycleViewMode = useCallback(() => {
+  const handleToggleRoom = useCallback(
+    (targetRoom?: RoomId) => {
+      const st = gameStateRef.current;
+      toggleRoom(st, targetRoom);
+      soundEngine.playStep();
+      syncHudNow();
+    },
+    [syncHudNow]
+  );
+
+  const handleCycleTimeOfDay = useCallback(() => {
     const st = gameStateRef.current;
-    cycleViewMode(st);
+    cycleTimeOfDay(st);
+    soundEngine.playStep();
+    syncHudNow();
+  }, [syncHudNow]);
+
+  const handleCycleWeather = useCallback(() => {
+    const st = gameStateRef.current;
+    cycleWeather(st);
     soundEngine.playStep();
     syncHudNow();
   }, [syncHudNow]);
@@ -355,7 +374,11 @@ export default function App() {
     const canvas = canvasRef.current;
     if (!canvas) return { x: 0, y: 0 };
     const rect = canvas.getBoundingClientRect();
-    return screenToWorldWithCamera(clientX, clientY, rect, cameraRef.current);
+    if (rect.width === 0 || rect.height === 0) return { x: 0, y: 0 };
+    return {
+      x: ((clientX - rect.left) / rect.width) * WORLD_WIDTH,
+      y: ((clientY - rect.top) / rect.height) * WORLD_HEIGHT,
+    };
   }, []);
 
   useEffect(() => {
@@ -433,7 +456,11 @@ export default function App() {
         } else if (key === 'c') {
           handlePetCat();
         } else if (key === 'v') {
-          handleCycleViewMode();
+          handleToggleRoom();
+        } else if (key === 't') {
+          handleCycleTimeOfDay();
+        } else if (key === 'g') {
+          handleCycleWeather();
         } else if (key === 'b') {
           soundEngine.toggleBgm();
           syncHudNow();
@@ -474,7 +501,9 @@ export default function App() {
     handleWaterNextDaisy,
     handleToggleMiataHeadlights,
     handlePetCat,
-    handleCycleViewMode,
+    handleToggleRoom,
+    handleCycleTimeOfDay,
+    handleCycleWeather,
     syncBodyMode,
     syncHudNow,
   ]);
@@ -499,14 +528,34 @@ export default function App() {
 
       soundEngine.updateBgm(dt);
 
-      // Smoothly interpolate camera toward target ViewMode
-      const targetCam = getTargetCamera(st.viewMode);
-      const camLerp = Math.min(1, dt * 8);
-      cameraRef.current.zoom += (targetCam.zoom - cameraRef.current.zoom) * camLerp;
-      cameraRef.current.focusX += (targetCam.focusX - cameraRef.current.focusX) * camLerp;
-      cameraRef.current.focusY += (targetCam.focusY - cameraRef.current.focusY) * camLerp;
-
-      if (Math.random() < 0.14) {
+      // Ambient weather particles (Rain, Breeze Daisy Petals, or Pollen)
+      if (st.weather === 'rain') {
+        for (let r = 0; r < 2; r++) {
+          particles.spawn(
+            'rain',
+            40 + Math.random() * (WORLD_WIDTH - 40),
+            60 + Math.random() * 140,
+            -55,
+            290 + Math.random() * 50,
+            0.75 + Math.random() * 0.35,
+            3,
+            '#7dd3fc'
+          );
+        }
+      } else if (st.weather === 'breeze') {
+        if (Math.random() < 0.38) {
+          particles.spawn(
+            'petal',
+            Math.random() * (WORLD_WIDTH - 80),
+            80 + Math.random() * (WORLD_HEIGHT - 120),
+            42 + Math.random() * 24,
+            12 + Math.sin(timeSec * 3) * 10,
+            2.4,
+            5,
+            '#ffffff'
+          );
+        }
+      } else if (Math.random() < 0.12) {
         particles.spawn(
           'pollen',
           Math.random() * WORLD_WIDTH,
@@ -542,12 +591,17 @@ export default function App() {
         if (keys.has('s') || keys.has('arrowdown')) moveY += 1;
 
         const baseSpeed = st.barista.speedBoostTimer > 0 ? 225 : 165;
+        const minX = st.room === 'inside' ? 64 : 64;
+        const maxX = st.room === 'inside' ? 840 : 840;
+        const minY = st.room === 'inside' ? 145 : 128;
+        const maxY = st.room === 'inside' ? 435 : 435;
+
         if (moveX !== 0 || moveY !== 0) {
           const len = Math.hypot(moveX, moveY);
           const dx = (moveX / len) * baseSpeed * simDt;
           const dy = (moveY / len) * baseSpeed * simDt;
-          st.barista.x = Math.max(168, Math.min(610, st.barista.x + dx));
-          st.barista.y = Math.max(182, Math.min(410, st.barista.y + dy));
+          st.barista.x = Math.max(minX, Math.min(maxX, st.barista.x + dx));
+          st.barista.y = Math.max(minY, Math.min(maxY, st.barista.y + dy));
           st.barista.targetX = st.barista.x;
           st.barista.targetY = st.barista.y;
           st.barista.walkDist += Math.hypot(dx, dy);
@@ -580,11 +634,11 @@ export default function App() {
         const stepFinished = advancePrepTimer(st, simDt);
         if (stepFinished) {
           soundEngine.playStepReady();
-          particlesRef.current.emitBurst('sparkle', 392, 236, 8);
+          particlesRef.current.emitBurst('sparkle', 356, 236, 8);
           updateHudIfChanged(st);
         }
 
-        // 3. Multi-State Smooth Waypoint Cats (Lilo & Champy — Zero Teleportation!)
+        // 3. Multi-State Smooth Waypoint Cats (Lilo inside Cafe/Garage & Champy in Garden)
         st.cats.forEach((cat) => {
           cat.tailPhase += simDt * 2.6;
           if (cat.state === 'pouncing') {
@@ -607,7 +661,6 @@ export default function App() {
               cat.y += (cdy / cdist) * cstep;
               cat.facing = cdx < 0 ? 'left' : 'right';
             } else {
-              // Reached destination smoothly -> transition to intended resting behavior!
               cat.state = cat.nextStateAfterWalk;
               cat.stateTimer = 4.2 + Math.random() * 2.5;
             }
@@ -615,12 +668,12 @@ export default function App() {
             cat.stateTimer -= simDt;
             if (cat.stateTimer <= 0) {
               if (cat.id === 'lilo') {
-                // Lilo smoothly walks between the 1990 Miata MX-5 hood (742, 268),
-                // the Indoor Cafe Rug (556, 222), and the Pickup Bar (472, 224)
+                // Lilo smoothly walks between the 1990 Miata MX-5 hood (748, 274),
+                // the Indoor Cafe Rug (496, 246), and the Indoor Lounge (264, 348)
                 const liloWaypoints = [
-                  { x: 742, y: 268, rest: 'napping' as const },
-                  { x: 556, y: 222, rest: 'sitting_grooming' as const },
-                  { x: 472, y: 224, rest: 'sitting_grooming' as const },
+                  { x: 748, y: 274, rest: 'napping' as const },
+                  { x: 496, y: 246, rest: 'sitting_grooming' as const },
+                  { x: 264, y: 348, rest: 'sitting_grooming' as const },
                 ];
                 const nextSpot =
                   liloWaypoints.find((w) => Math.hypot(w.x - cat.x, w.y - cat.y) > 40) ??
@@ -630,12 +683,12 @@ export default function App() {
                 cat.nextStateAfterWalk = nextSpot.rest;
                 cat.state = 'walking';
               } else {
-                // Champy smoothly walks & pounces around the Daisy Planters and Outdoor Tables
+                // Champy smoothly walks & pounces around the 6 Daisy Beds & Garden Well
                 const champyWaypoints = [
-                  { x: 268, y: 356, rest: 'sitting_grooming' as const, hop: false },
-                  { x: 184, y: 406, rest: 'napping' as const, hop: true },
-                  { x: 504, y: 364, rest: 'sitting_grooming' as const, hop: false },
-                  { x: 590, y: 408, rest: 'napping' as const, hop: true },
+                  { x: 310, y: 332, rest: 'sitting_grooming' as const, hop: false },
+                  { x: 204, y: 390, rest: 'napping' as const, hop: true },
+                  { x: 590, y: 332, rest: 'sitting_grooming' as const, hop: false },
+                  { x: 696, y: 390, rest: 'napping' as const, hop: true },
                 ];
                 const candidates = champyWaypoints.filter(
                   (w) => Math.hypot(w.x - cat.x, w.y - cat.y) > 45
@@ -651,19 +704,8 @@ export default function App() {
           }
         });
 
-        // 4. Dynamic Daisy Hydration Decay (~1.2% per second)
-        let needsHudRefresh = false;
-        st.daisies.forEach((patch, idx) => {
-          const decayRate = 1.15 + (idx % 3) * 0.1;
-          patch.hydration = Math.max(15, patch.hydration - decayRate * simDt);
-          const nowThirsty = patch.hydration <= 55;
-          if (nowThirsty !== patch.needsWater) {
-            patch.needsWater = nowThirsty;
-            patch.bloomStage = nowThirsty ? 2 : 3;
-            st.cozyRating = calculateCozyRating(st.daisies, st.hearts, st.catPetBonus);
-            needsHudRefresh = true;
-          }
-        });
+        // 4. Environment Progression (Day/Sunset/Night + Weather + Rain Daisy Hydration!)
+        let needsHudRefresh = advanceEnvironmentAndHydration(st, simDt);
 
         // 5. Update Floating World Popups
         for (let i = st.popups.length - 1; i >= 0; i--) {
@@ -675,7 +717,7 @@ export default function App() {
           }
         }
 
-        // 6. Update NPC Customers
+        // 6. Update NPC Customers (both Inside and in the Backyard Garden!)
         for (let i = st.customers.length - 1; i >= 0; i--) {
           const c = st.customers[i];
           const dx = c.targetX - c.x;
@@ -698,8 +740,8 @@ export default function App() {
               if (c.sipTimer <= 0) {
                 c.state = 'walking_out';
                 c.seatIndex = null;
-                c.targetX = 392;
-                c.targetY = 520;
+                c.targetX = c.room === 'inside' ? 356 : 450;
+                c.targetY = 500;
               }
             } else if (c.state === 'walking_out') {
               st.customers.splice(i, 1);
@@ -725,11 +767,12 @@ export default function App() {
             name: nextName,
             spriteVariant: customerIdCounter % 4,
             order: nextOrder,
+            room: 'inside',
             state: 'walking_in',
-            x: 392,
-            y: 475,
-            targetX: 392,
-            targetY: 322,
+            x: 356,
+            y: 455,
+            targetX: 356,
+            targetY: 312,
             seatIndex: null,
             sipTimer: 0,
             heartsGiven: 0,
@@ -759,8 +802,7 @@ export default function App() {
             timeSec,
             hoveredStationRef.current,
             hoveredDaisyRef.current,
-            hoveredMiataRef.current,
-            cameraRef.current
+            hoveredMiataRef.current
           );
         }
       }
@@ -780,32 +822,42 @@ export default function App() {
     };
   }, [updateHudIfChanged]);
 
-  // Canvas pointer hover & click handling
+  // Canvas pointer hover & click handling per active Room Map (`inside` vs `garden`)
   const handleCanvasPointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const { x, y } = screenToWorld(e.clientX, e.clientY);
     const st = gameStateRef.current;
 
-    let foundStation: string | null = null;
-    for (const s of STATIONS) {
-      if (Math.abs(x - s.x) <= s.width / 2 + 6 && Math.abs(y - s.y) <= s.height / 2 + 6) {
-        foundStation = s.id;
-        break;
+    if (st.room === 'inside') {
+      let foundStation: string | null = null;
+      for (const s of STATIONS) {
+        if (s.id === 'watering_can') continue;
+        if (Math.abs(x - s.x) <= s.width / 2 + 6 && Math.abs(y - s.y) <= s.height / 2 + 6) {
+          foundStation = s.id;
+          break;
+        }
       }
-    }
-    hoveredStationRef.current = foundStation;
+      hoveredStationRef.current = foundStation;
+      hoveredDaisyRef.current = null;
+      hoveredMiataRef.current =
+        Math.abs(x - MIATA_GARAGE_BOUNDS.x) <= MIATA_GARAGE_BOUNDS.width / 2 &&
+        Math.abs(y - MIATA_GARAGE_BOUNDS.y) <= MIATA_GARAGE_BOUNDS.height / 2;
+    } else {
+      hoveredMiataRef.current = false;
+      const well = STATIONS.find((s) => s.id === 'watering_can');
+      hoveredStationRef.current =
+        well && Math.abs(x - well.x) <= well.width / 2 + 8 && Math.abs(y - well.y) <= well.height / 2 + 8
+          ? 'watering_can'
+          : null;
 
-    let foundDaisy: string | null = null;
-    for (const d of st.daisies) {
-      if (Math.abs(x - d.x) <= 48 && Math.abs(y - d.y) <= 32) {
-        foundDaisy = d.id;
-        break;
+      let foundDaisy: string | null = null;
+      for (const d of st.daisies) {
+        if (Math.abs(x - d.x) <= 54 && Math.abs(y - d.y) <= 34) {
+          foundDaisy = d.id;
+          break;
+        }
       }
+      hoveredDaisyRef.current = foundDaisy;
     }
-    hoveredDaisyRef.current = foundDaisy;
-
-    hoveredMiataRef.current =
-      Math.abs(x - MIATA_GARAGE_BOUNDS.x) <= MIATA_GARAGE_BOUNDS.width / 2 &&
-      Math.abs(y - MIATA_GARAGE_BOUNDS.y) <= MIATA_GARAGE_BOUNDS.height / 2;
   };
 
   const handleCanvasPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
@@ -814,62 +866,103 @@ export default function App() {
 
     const { x, y } = screenToWorld(e.clientX, e.clientY);
 
-    // 1. Check if clicked Lilo or Champy Cat Companion
+    // 1. Check if clicked Lilo or Champy in the current room
     for (const cat of st.cats) {
-      if (Math.abs(x - cat.x) <= 28 && Math.abs(y - cat.y) <= 24) {
+      if (cat.room === st.room && Math.abs(x - cat.x) <= 28 && Math.abs(y - cat.y) <= 24) {
         handlePetCat(cat.id);
         return;
       }
     }
 
-    // 2. Check if clicked the 1990 Mazda Miata MX-5 in the Garage Bay
-    if (
-      Math.abs(x - MIATA_GARAGE_BOUNDS.x) <= MIATA_GARAGE_BOUNDS.width / 2 &&
-      Math.abs(y - MIATA_GARAGE_BOUNDS.y) <= MIATA_GARAGE_BOUNDS.height / 2
-    ) {
-      handleToggleMiataHeadlights();
-      return;
-    }
-
-    // 3. Check if clicked a Daisy Planter Box
-    for (const d of st.daisies) {
-      if (Math.abs(x - d.x) <= 48 && Math.abs(y - d.y) <= 34) {
-        handleWaterDaisyById(d.id);
+    if (st.room === 'inside') {
+      // Check South Doorway Mat -> Switch to GARDEN map
+      if (
+        Math.abs(x - INSIDE_DOOR_MAT.x) <= INSIDE_DOOR_MAT.width / 2 + 6 &&
+        Math.abs(y - INSIDE_DOOR_MAT.y) <= INSIDE_DOOR_MAT.height / 2 + 6
+      ) {
+        handleToggleRoom('garden');
         return;
+      }
+
+      // Check 1990 Mazda Miata MX-5 in the Garage Showroom
+      if (
+        Math.abs(x - MIATA_GARAGE_BOUNDS.x) <= MIATA_GARAGE_BOUNDS.width / 2 &&
+        Math.abs(y - MIATA_GARAGE_BOUNDS.y) <= MIATA_GARAGE_BOUNDS.height / 2
+      ) {
+        handleToggleMiataHeadlights();
+        return;
+      }
+
+      // Check waiting Customer or their Pokémon GBA dialogue box
+      const waitingCustomer = st.customers.find((c) => c.state === 'waiting');
+      if (
+        waitingCustomer &&
+        x >= waitingCustomer.x - 32 &&
+        x <= waitingCustomer.x + 220 &&
+        y >= waitingCustomer.y - 44 &&
+        y <= waitingCustomer.y + 36
+      ) {
+        handleSmartStep();
+        return;
+      }
+
+      // Check Indoor Brewing & Pickup Stations
+      for (const s of STATIONS) {
+        if (s.id === 'watering_can') continue;
+        if (Math.abs(x - s.x) <= s.width / 2 + 6 && Math.abs(y - s.y) <= s.height / 2 + 6) {
+          handleTriggerStation(s.id);
+          return;
+        }
+      }
+    } else {
+      // GARDEN ROOM INTERACTIONS
+      // Check North Veranda Doorway Mat -> Switch to INSIDE map
+      if (
+        Math.abs(x - GARDEN_DOOR_MAT.x) <= GARDEN_DOOR_MAT.width / 2 + 6 &&
+        Math.abs(y - GARDEN_DOOR_MAT.y) <= GARDEN_DOOR_MAT.height / 2 + 6
+      ) {
+        handleToggleRoom('inside');
+        return;
+      }
+
+      // Check Veranda Pass-Through Order Window -> Smart Step!
+      if (
+        Math.abs(x - GARDEN_ORDER_WINDOW.x) <= GARDEN_ORDER_WINDOW.width / 2 + 6 &&
+        Math.abs(y - GARDEN_ORDER_WINDOW.y) <= GARDEN_ORDER_WINDOW.height / 2 + 6
+      ) {
+        handleSmartStep();
+        return;
+      }
+
+      // Check Center Garden Watering Well
+      const well = STATIONS.find((s) => s.id === 'watering_can');
+      if (
+        well &&
+        Math.abs(x - well.x) <= well.width / 2 + 8 &&
+        Math.abs(y - well.y) <= well.height / 2 + 8
+      ) {
+        handleTriggerStation('watering_can');
+        return;
+      }
+
+      // Check 6 Blooming Daisy Planter Beds
+      for (const d of st.daisies) {
+        if (Math.abs(x - d.x) <= 54 && Math.abs(y - d.y) <= 34) {
+          handleWaterDaisyById(d.id);
+          return;
+        }
       }
     }
 
-    // 4. Check if clicked a waiting Customer or their Pokémon GBA dialogue box
-    //    Clicking the customer/bubble automatically executes Smart Step (brews next step or serves!)
-    const waitingCustomer = st.customers.find((c) => c.state === 'waiting');
-    if (
-      waitingCustomer &&
-      x >= waitingCustomer.x - 32 &&
-      x <= waitingCustomer.x + 220 &&
-      y >= waitingCustomer.y - 44 &&
-      y <= waitingCustomer.y + 36
-    ) {
-      handleSmartStep();
-      return;
-    }
-
-    // 5. Check if clicked a Cafe Station
-    for (const s of STATIONS) {
-      if (Math.abs(x - s.x) <= s.width / 2 + 6 && Math.abs(y - s.y) <= s.height / 2 + 6) {
-        handleTriggerStation(s.id);
-        return;
-      }
-    }
-
-    // 6. Otherwise walk Barista to the clicked spot
-    st.barista.targetX = Math.max(168, Math.min(610, x));
-    st.barista.targetY = Math.max(182, Math.min(410, y));
+    // Otherwise walk Barista to the clicked spot
+    st.barista.targetX = Math.max(64, Math.min(840, x));
+    st.barista.targetY = Math.max(135, Math.min(435, y));
     soundEngine.playStep();
   };
 
   return (
     <main className="relative w-screen h-dvh overflow-hidden bg-[#0b0d12] flex flex-col justify-between">
-      {/* External Top GBA Status HUD Bar (Single compact horizontal bar) */}
+      {/* External Top GBA Status HUD Bar (Zero Horizontal Scroll) */}
       {uiMode !== 'title' && (
         <TopHudBar
           hud={hud}
@@ -883,7 +976,9 @@ export default function App() {
             soundEngine.toggleMute();
             syncHudNow();
           }}
-          onCycleViewMode={handleCycleViewMode}
+          onToggleRoom={() => handleToggleRoom()}
+          onCycleTimeOfDay={handleCycleTimeOfDay}
+          onCycleWeather={handleCycleWeather}
           onPause={() => {
             const st = gameStateRef.current;
             setSummaryStats({
@@ -924,7 +1019,7 @@ export default function App() {
               onSmartStep={handleSmartStep}
               onWaterNextDaisy={handleWaterNextDaisy}
               onPetCats={() => handlePetCat()}
-              onCycleViewMode={handleCycleViewMode}
+              onToggleRoom={() => handleToggleRoom()}
             />
           </div>
         )}

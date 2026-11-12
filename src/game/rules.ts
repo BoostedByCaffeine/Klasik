@@ -4,7 +4,9 @@ export type DrinkId =
   | 'miata_mocha'
   | 'catnip_herbal_tea';
 
-export type ViewMode = 'all' | 'indoor' | 'outdoor';
+export type RoomId = 'inside' | 'garden';
+export type TimeOfDay = 'day' | 'sunset' | 'night';
+export type WeatherType = 'clear' | 'breeze' | 'rain';
 
 export interface DrinkRecipe {
   id: DrinkId;
@@ -71,6 +73,7 @@ export type CatBehaviorState =
 export interface CatCompanion {
   id: 'lilo' | 'champy';
   name: 'Lilo' | 'Champy';
+  room: RoomId;
   coatColor: 'white' | 'black';
   eyeColor: string;
   collarColor: string;
@@ -92,6 +95,7 @@ export interface CustomerEntity {
   name: string;
   spriteVariant: number; // 0..3
   order: DrinkId;
+  room: RoomId;
   state: 'walking_in' | 'waiting' | 'sipping' | 'walking_out';
   x: number;
   y: number;
@@ -107,6 +111,7 @@ export interface CustomerEntity {
 
 export interface FloatingTextPopup {
   id: string;
+  room: RoomId;
   text: string;
   x: number;
   y: number;
@@ -118,7 +123,11 @@ export interface FloatingTextPopup {
 
 export interface CafeState {
   mode: 'title' | 'playing' | 'paused' | 'gameover';
-  viewMode: ViewMode;
+  room: RoomId;
+  timeOfDay: TimeOfDay;
+  timeCycleTimer: number;
+  weather: WeatherType;
+  weatherCycleTimer: number;
   dayNumber: number;
   servedCount: number;
   dailyTarget: number;
@@ -200,9 +209,9 @@ export const STATIONS: StationConfig[] = [
     id: 'grinder',
     name: 'Monochrome Grinder & Cold Tap',
     shortLabel: 'Grinder',
-    x: 204,
-    y: 148,
-    width: 62,
+    x: 112,
+    y: 138,
+    width: 64,
     height: 46,
     processDuration: 0.6,
     hotkey: '1',
@@ -211,9 +220,9 @@ export const STATIONS: StationConfig[] = [
     id: 'espresso',
     name: 'Chrome Dual-Group Espresso',
     shortLabel: 'Espresso',
-    x: 280,
-    y: 148,
-    width: 66,
+    x: 190,
+    y: 138,
+    width: 68,
     height: 46,
     processDuration: 0.6,
     hotkey: '2',
@@ -222,9 +231,9 @@ export const STATIONS: StationConfig[] = [
     id: 'milk_frother',
     name: 'Sweet Cream & Oat Frother',
     shortLabel: 'Frother',
-    x: 356,
-    y: 148,
-    width: 62,
+    x: 268,
+    y: 138,
+    width: 64,
     height: 46,
     processDuration: 0.6,
     hotkey: '3',
@@ -233,9 +242,9 @@ export const STATIONS: StationConfig[] = [
     id: 'kettle',
     name: 'Matte-Black Gooseneck Kettle',
     shortLabel: 'Kettle',
-    x: 432,
-    y: 148,
-    width: 62,
+    x: 346,
+    y: 138,
+    width: 64,
     height: 46,
     processDuration: 0.6,
     hotkey: '4',
@@ -244,9 +253,9 @@ export const STATIONS: StationConfig[] = [
     id: 'tea_leaves',
     name: 'Catnip & Daisy Tea Caddy',
     shortLabel: 'Tea Leaves',
-    x: 508,
-    y: 148,
-    width: 62,
+    x: 424,
+    y: 138,
+    width: 64,
     height: 46,
     processDuration: 0.6,
     hotkey: '5',
@@ -255,21 +264,21 @@ export const STATIONS: StationConfig[] = [
     id: 'trash',
     name: 'Garage Knock-Box & Bin',
     shortLabel: 'Clear',
-    x: 580,
-    y: 148,
-    width: 52,
+    x: 498,
+    y: 138,
+    width: 54,
     height: 46,
     processDuration: 0,
     hotkey: 'X',
   },
   {
     id: 'watering_can',
-    name: 'Slate Garden Watering Can',
+    name: 'Garden Watering Well & Can',
     shortLabel: 'Water Can',
-    x: 224,
-    y: 238,
-    width: 64,
-    height: 44,
+    x: 450,
+    y: 254,
+    width: 72,
+    height: 54,
     processDuration: 0,
     hotkey: 'W',
   },
@@ -277,7 +286,7 @@ export const STATIONS: StationConfig[] = [
     id: 'cup_counter',
     name: 'Monochrome Pickup Bar',
     shortLabel: 'Serve Cup',
-    x: 392,
+    x: 356,
     y: 238,
     width: 112,
     height: 44,
@@ -286,25 +295,28 @@ export const STATIONS: StationConfig[] = [
   },
 ];
 
+// 6 Blooming Daisy Planter Beds arranged around the 900x480 GARDEN map
 export const INITIAL_DAISIES: DaisyPatch[] = [
-  { id: 'daisy-nw', name: 'West Patio Planter', x: 78, y: 162, hydration: 38, needsWater: true, lastWateredAt: 0, bloomStage: 2 },
-  { id: 'daisy-sw', name: 'Veranda Corner Planter', x: 78, y: 318, hydration: 82, needsWater: false, lastWateredAt: 0, bloomStage: 3 },
-  { id: 'daisy-s1', name: 'Garden Walk Left Bed', x: 226, y: 426, hydration: 42, needsWater: true, lastWateredAt: 0, bloomStage: 2 },
-  { id: 'daisy-s2', name: 'Garden Walk Right Bed', x: 548, y: 426, hydration: 88, needsWater: false, lastWateredAt: 0, bloomStage: 3 },
-  { id: 'daisy-ne', name: 'Garage Driveway Planter', x: 812, y: 426, hydration: 34, needsWater: true, lastWateredAt: 0, bloomStage: 2 },
+  { id: 'daisy-nw', name: 'Northwest Veranda Bed', x: 110, y: 176, hydration: 42, needsWater: true, lastWateredAt: 0, bloomStage: 2 },
+  { id: 'daisy-ne', name: 'Northeast Trellis Bed', x: 790, y: 176, hydration: 86, needsWater: false, lastWateredAt: 0, bloomStage: 3 },
+  { id: 'daisy-mw', name: 'West Lawn Planter', x: 110, y: 304, hydration: 38, needsWater: true, lastWateredAt: 0, bloomStage: 2 },
+  { id: 'daisy-me', name: 'East Lawn Planter', x: 790, y: 304, hydration: 82, needsWater: false, lastWateredAt: 0, bloomStage: 3 },
+  { id: 'daisy-sw', name: 'Southwest Gate Planter', x: 204, y: 424, hydration: 44, needsWater: true, lastWateredAt: 0, bloomStage: 2 },
+  { id: 'daisy-se', name: 'Southeast Gate Planter', x: 696, y: 424, hydration: 90, needsWater: false, lastWateredAt: 0, bloomStage: 3 },
 ];
 
 export const INITIAL_CATS: CatCompanion[] = [
   {
     id: 'lilo',
     name: 'Lilo',
+    room: 'inside',
     coatColor: 'white',
     eyeColor: '#38bdf8', // Bright Blue Eyes
     collarColor: '#2563eb', // Blue Collar
-    x: 734,
-    y: 268, // Napping squarely on the 1990 Miata MX-5 front hood
-    targetX: 734,
-    targetY: 268,
+    x: 748,
+    y: 274, // Napping on the 1990 Miata MX-5 hood inside the Garage Showroom!
+    targetX: 748,
+    targetY: 274,
     nextStateAfterWalk: 'napping',
     state: 'napping',
     stateTimer: 5.5,
@@ -316,13 +328,14 @@ export const INITIAL_CATS: CatCompanion[] = [
   {
     id: 'champy',
     name: 'Champy',
+    room: 'garden',
     coatColor: 'black',
     eyeColor: '#22c55e', // Bright Green Eyes
     collarColor: '#14b8a6', // Bluish-Green Collar
-    x: 256,
-    y: 356,
-    targetX: 306,
-    targetY: 368,
+    x: 310,
+    y: 332,
+    targetX: 356,
+    targetY: 344,
     nextStateAfterWalk: 'sitting_grooming',
     state: 'walking',
     stateTimer: 4.0,
@@ -333,18 +346,33 @@ export const INITIAL_CATS: CatCompanion[] = [
   },
 ];
 
-export const GARDEN_TABLES = [
-  { x: 226, y: 356 },
-  { x: 548, y: 364 },
+// 3 Indoor Seating Lounge Tables (INSIDE map)
+export const INDOOR_TABLES = [
+  { x: 132, y: 358 },
+  { x: 264, y: 382 },
+  { x: 492, y: 358 },
 ];
 
-// 1990 Mazda Miata MX-5 (NA) parked in the right-hand Indoor Checkered Garage Bay
+// 4 Outdoor Umbrella Lounge Tables (GARDEN map)
+export const GARDEN_TABLES = [
+  { x: 268, y: 214 },
+  { x: 632, y: 214 },
+  { x: 268, y: 352 },
+  { x: 632, y: 352 },
+];
+
+// 1990 Mazda Miata MX-5 (NA) in the Right-Wing Garage Showroom (INSIDE map)
 export const MIATA_GARAGE_BOUNDS = {
-  x: 742,
-  y: 242,
-  width: 116,
-  height: 178,
+  x: 748,
+  y: 248,
+  width: 118,
+  height: 180,
 };
+
+// Doorway mats for switching between INSIDE and GARDEN maps
+export const INSIDE_DOOR_MAT = { x: 356, y: 446, width: 120, height: 34 };
+export const GARDEN_DOOR_MAT = { x: 450, y: 102, width: 120, height: 34 };
+export const GARDEN_ORDER_WINDOW = { x: 260, y: 82, width: 156, height: 48 };
 
 export const NPC_NAMES = ['Flora', 'Milo', 'Takumi', 'Clara', 'Keisuke', 'Hazel', 'Suki', 'Oliver'];
 
@@ -353,10 +381,12 @@ export function spawnPopup(
   text: string,
   x: number,
   y: number,
-  color = '#facc15'
+  color = '#facc15',
+  room: RoomId = state.room
 ) {
   state.popups.push({
     id: `pop-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    room,
     text,
     x,
     y,
@@ -365,7 +395,7 @@ export function spawnPopup(
     maxLife: 1.35,
     color,
   });
-  if (state.popups.length > 16) {
+  if (state.popups.length > 18) {
     state.popups.shift();
   }
 }
@@ -378,11 +408,12 @@ export function createInitialCafeState(autostart = false): CafeState {
     name: 'Flora',
     spriteVariant: 0,
     order: 'miata_mocha',
+    room: 'inside',
     state: 'waiting',
-    x: 392,
-    y: 322,
-    targetX: 392,
-    targetY: 322,
+    x: 356,
+    y: 312,
+    targetX: 356,
+    targetY: 312,
     seatIndex: null,
     sipTimer: 0,
     heartsGiven: 0,
@@ -393,13 +424,17 @@ export function createInitialCafeState(autostart = false): CafeState {
 
   return {
     mode: autostart ? 'playing' : 'title',
-    viewMode: 'all',
+    room: 'inside',
+    timeOfDay: 'day',
+    timeCycleTimer: 45,
+    weather: 'clear',
+    weatherCycleTimer: 40,
     dayNumber: 1,
     servedCount: 0,
     dailyTarget: 6,
     coins: 25,
     hearts: 3,
-    cozyRating: calculateCozyRating(daisies, 3, 0),
+    cozyRating: calculateCozyRating(daisies, 3, 0, 'clear'),
     bestCozyRating: 85,
     elapsedSeconds: 0,
     miataHeadlightsOn: true,
@@ -418,31 +453,34 @@ export function createInitialCafeState(autostart = false): CafeState {
     customers: [initialCustomer],
     popups: [],
     barista: {
-      x: 336,
-      y: 196,
-      targetX: 336,
-      targetY: 196,
+      x: 296,
+      y: 192,
+      targetX: 296,
+      targetY: 192,
       facing: 'down',
       walkDist: 0,
       scaleX: 1,
       scaleY: 1,
       speedBoostTimer: 0,
     },
-    lastMessage: "Flora ordered a '90s Miata Mocha! Tap ⚡ Smart Step or [1] Grinder → [2] Espresso → [Space] Cup.",
+    lastMessage:
+      "Flora ordered a '90s Miata Mocha! Tap ⚡ Smart Step or [1] Grinder → [2] Espresso → [Space] Cup.",
   };
 }
 
 export function calculateCozyRating(
   daisies: DaisyPatch[],
   hearts: number,
-  catPetBonus = 0
+  catPetBonus = 0,
+  weather: WeatherType = 'clear'
 ): number {
   if (daisies.length === 0) return 60;
   const avgHydration = daisies.reduce((sum, d) => sum + d.hydration, 0) / daisies.length;
   const hydratedCount = daisies.filter((d) => !d.needsWater).length;
   const gardenScore = avgHydration * 0.5 + (hydratedCount / daisies.length) * 30;
   const heartBonus = Math.min(15, hearts * 1.5);
-  return Math.max(15, Math.min(100, Math.round(gardenScore + heartBonus + catPetBonus)));
+  const rainBonus = weather === 'rain' ? 8 : weather === 'breeze' ? 3 : 0;
+  return Math.max(15, Math.min(100, Math.round(gardenScore + heartBonus + catPetBonus + rainBonus)));
 }
 
 /**
@@ -461,17 +499,123 @@ export function getRecommendedStation(state: CafeState): StationId | null {
   return recipe.steps[prep.currentStepIndex] ?? null;
 }
 
-export function cycleViewMode(state: CafeState): ViewMode {
-  const order: ViewMode[] = ['all', 'indoor', 'outdoor'];
-  const nextIdx = (order.indexOf(state.viewMode) + 1) % order.length;
-  state.viewMode = order[nextIdx];
-  const labels: Record<ViewMode, string> = {
-    all: 'VIEW: ALL (Split Indoor Cafe & Outdoor Daisy Garden)',
-    indoor: 'VIEW: INDOOR (Monochrome Cafe & 1990 Miata Garage Bay)',
-    outdoor: 'VIEW: OUTDOOR (Blooming Daisy Garden Patio)',
+/**
+ * Switches between the two distinct 900x480 maps (`inside` and `garden`).
+ */
+export function toggleRoom(state: CafeState, targetRoom?: RoomId): RoomId {
+  const nextRoom: RoomId = targetRoom ?? (state.room === 'inside' ? 'garden' : 'inside');
+  const changed = state.room !== nextRoom;
+  state.room = nextRoom;
+
+  if (changed) {
+    if (nextRoom === 'garden') {
+      state.barista.x = 450;
+      state.barista.y = 148;
+      state.barista.targetX = 450;
+      state.barista.targetY = 176;
+      state.barista.facing = 'down';
+      state.lastMessage =
+        'Stepped out to the Backyard Daisy Garden! Click any planter or the Watering Well [W].';
+    } else {
+      state.barista.x = 356;
+      state.barista.y = 390;
+      state.barista.targetX = 296;
+      state.barista.targetY = 192;
+      state.barista.facing = 'up';
+      state.lastMessage =
+        'Entered the Monochrome Coffee Shop & 1990 Miata Garage Showroom!';
+    }
+  }
+  return state.room;
+}
+
+/**
+ * Cycles Time of Day (`day` -> `sunset` -> `night`) via `[T]` or UI button.
+ */
+export function cycleTimeOfDay(state: CafeState): TimeOfDay {
+  const order: TimeOfDay[] = ['day', 'sunset', 'night'];
+  const next = order[(order.indexOf(state.timeOfDay) + 1) % order.length];
+  state.timeOfDay = next;
+  state.timeCycleTimer = 45;
+  const labels: Record<TimeOfDay, string> = {
+    day: '☀️ DAYTIME: Bright morning sun illuminates the Cafe & Daisy Garden.',
+    sunset: '🌅 SUNSET: Golden-hour glow warms the pendant lamps & Miata showroom!',
+    night: '🌙 NIGHT: Cozy midnight vibes — string lanterns, headlights & fireflies glow!',
   };
-  state.lastMessage = labels[state.viewMode];
-  return state.viewMode;
+  state.lastMessage = labels[next];
+  return next;
+}
+
+/**
+ * Cycles Weather (`clear` -> `breeze` -> `rain`) via `[G]` or UI button.
+ */
+export function cycleWeather(state: CafeState): WeatherType {
+  const order: WeatherType[] = ['clear', 'breeze', 'rain'];
+  const next = order[(order.indexOf(state.weather) + 1) % order.length];
+  state.weather = next;
+  state.weatherCycleTimer = 40;
+  state.cozyRating = calculateCozyRating(state.daisies, state.hearts, state.catPetBonus, state.weather);
+  state.bestCozyRating = Math.max(state.bestCozyRating, state.cozyRating);
+
+  const labels: Record<WeatherType, string> = {
+    clear: '⛅ CLEAR SKY: Crisp sunny weather across the Garden Garage Cafe.',
+    breeze: '🍃 DAISY BREEZE: Gentle wind carries white daisy petals across the lawn!',
+    rain: '🌧️ COZY RAIN: Raindrops hydrate all 6 Daisy beds (+4%/s) & boost Cozy Rating!',
+  };
+  state.lastMessage = labels[next];
+  return next;
+}
+
+/**
+ * Updates Daisy bed hydration & auto-cycles time/weather over time.
+ * When `weather === 'rain'`, all 6 daisy beds regenerate `+4% per second`!
+ */
+export function advanceEnvironmentAndHydration(state: CafeState, dt: number): boolean {
+  let hudChanged = false;
+
+  // Auto-progress Time of Day every 45s
+  state.timeCycleTimer -= dt;
+  if (state.timeCycleTimer <= 0) {
+    cycleTimeOfDay(state);
+    hudChanged = true;
+  }
+
+  // Auto-progress Weather every 40s
+  state.weatherCycleTimer -= dt;
+  if (state.weatherCycleTimer <= 0) {
+    cycleWeather(state);
+    hudChanged = true;
+  }
+
+  const prevCozy = state.cozyRating;
+  state.daisies.forEach((patch, idx) => {
+    if (state.weather === 'rain') {
+      // Rain automatically hydrates all 6 Daisy beds at +4% per second!
+      patch.hydration = Math.min(100, patch.hydration + 4.0 * dt);
+    } else {
+      const decayRate = 1.15 + (idx % 3) * 0.1;
+      patch.hydration = Math.max(15, patch.hydration - decayRate * dt);
+    }
+    const nowThirsty = patch.hydration <= 55;
+    if (nowThirsty !== patch.needsWater) {
+      patch.needsWater = nowThirsty;
+      patch.bloomStage = nowThirsty ? 2 : 3;
+      hudChanged = true;
+    }
+  });
+
+  state.cozyRating = calculateCozyRating(
+    state.daisies,
+    state.hearts,
+    state.catPetBonus,
+    state.weather
+  );
+  state.bestCozyRating = Math.max(state.bestCozyRating, state.cozyRating);
+  if (state.cozyRating !== prevCozy) {
+    hudChanged = true;
+  }
+
+  return hudChanged;
 }
 
 export interface StationInteractionResult {
@@ -492,8 +636,27 @@ export function interactWithStation(
 ): StationInteractionResult {
   const prep = state.prep;
 
-  // If a station is currently processing, auto-complete it if the player clicks the next station
-  // OR if they click the same station when it's >35% done so fast tapping never feels stuck!
+  if (stationId === 'watering_can') {
+    state.room = 'garden';
+    prep.holdingWateringCan = !prep.holdingWateringCan;
+    if (prep.holdingWateringCan) {
+      prep.waterCharges = 3;
+      state.lastMessage =
+        'Filled Watering Can at the Garden Well! Click any daisy bed or press [W].';
+    } else {
+      state.lastMessage = 'Returned Watering Can to the Garden Well.';
+    }
+    return { handled: true, actionType: 'equip_can', message: state.lastMessage };
+  }
+
+  // Smart Auto-Switch QoL: Pressing any brewing station automatically switches to INSIDE map!
+  if (state.room !== 'inside') {
+    state.room = 'inside';
+    state.barista.x = 296;
+    state.barista.y = 205;
+  }
+
+  // Auto-complete any active step if the player clicks the next station or taps rapidly
   if (prep.processingStation !== null && prep.processTimer > 0) {
     if (stationId === prep.processingStation) {
       if (prep.processTimer <= prep.processDuration * 0.65) {
@@ -510,7 +673,7 @@ export function interactWithStation(
       return {
         handled: false,
         actionType: 'already_busy',
-        message: 'Brewing in progress — watch the progress bar above the station!',
+        message: 'Brewing in progress — watch the progress bar above the appliance!',
       };
     }
     prep.processingStation = null;
@@ -526,17 +689,6 @@ export function interactWithStation(
     prep.holdingWateringCan = false;
     state.lastMessage = 'Cleared counter tray and reset tools.';
     return { handled: true, actionType: 'clear_tray', message: state.lastMessage };
-  }
-
-  if (stationId === 'watering_can') {
-    prep.holdingWateringCan = !prep.holdingWateringCan;
-    if (prep.holdingWateringCan) {
-      prep.waterCharges = 3;
-      state.lastMessage = 'Equipped Slate Watering Can! Click any daisy planter or press [W].';
-    } else {
-      state.lastMessage = 'Returned Watering Can to the indoor stand.';
-    }
-    return { handled: true, actionType: 'equip_can', message: state.lastMessage };
   }
 
   prep.holdingWateringCan = false;
@@ -623,7 +775,7 @@ export function interactWithStation(
     }
   }
 
-  // STEP 2 -> STEP 3 (Finish Cup on Counter)
+  // STEP 2 -> STEP 3 (Finish Cup on Pickup Bar)
   if (prep.currentStepIndex === 2) {
     if (stationId === 'cup_counter') {
       prep.processingStation = 'cup_counter';
@@ -652,20 +804,14 @@ export function interactWithStation(
   };
 }
 
-/**
- * Executes the next intelligent action for the player (`⚡ Smart Step` button, `[E]`, or clicking the order bubble):
- * - If a station is currently mid-brew, finishes that step immediately so rapid tapping feels snappy.
- * - If `currentStepIndex === 3`, serves the waiting customer.
- * - Otherwise triggers the exact `getRecommendedStation(state)` for the customer's order!
- */
 export function executeSmartStep(state: CafeState): {
   type: 'station' | 'serve' | 'none';
   stationId?: StationId;
   servedResult?: ServeResult;
 } {
+  state.room = 'inside';
   const prep = state.prep;
 
-  // Complete any in-flight timer first so the user never gets stuck waiting
   if (prep.processingStation !== null && prep.processTimer > 0) {
     prep.processingStation = null;
     prep.processTimer = 0;
@@ -679,7 +825,6 @@ export function executeSmartStep(state: CafeState): {
     prep.activeDrink !== waitingCustomer.order &&
     prep.currentStepIndex < 3
   ) {
-    // Align active drink to the waiting customer's order automatically
     prep.activeDrink = waitingCustomer.order;
   }
 
@@ -709,7 +854,7 @@ export function advancePrepTimer(state: CafeState, dt: number): boolean {
     const recipe = prep.activeDrink ? RECIPES[prep.activeDrink] : null;
     const stObj = STATIONS.find((s) => s.id === finishedStation);
     if (stObj) {
-      spawnPopup(state, `✓ ${stObj.shortLabel.toUpperCase()}`, stObj.x, stObj.y - 26, '#4ade80');
+      spawnPopup(state, `✓ ${stObj.shortLabel.toUpperCase()}`, stObj.x, stObj.y - 26, '#4ade80', 'inside');
     }
 
     if (prep.currentStepIndex === 1) {
@@ -755,7 +900,7 @@ export function serveWaitingCustomer(state: CafeState): ServeResult {
       served: false,
       coinsEarned: 0,
       heartsEarned: 0,
-      message: 'Wait a moment for the next guest to walk up to the cafe door.',
+      message: 'Wait a moment for the next guest to walk up to the counter.',
     };
   }
 
@@ -781,7 +926,12 @@ export function serveWaitingCustomer(state: CafeState): ServeResult {
   state.coins += coinsEarned;
   state.hearts += heartsEarned;
   state.servedCount += 1;
-  state.cozyRating = calculateCozyRating(state.daisies, state.hearts, state.catPetBonus);
+  state.cozyRating = calculateCozyRating(
+    state.daisies,
+    state.hearts,
+    state.catPetBonus,
+    state.weather
+  );
   state.bestCozyRating = Math.max(state.bestCozyRating, state.cozyRating);
 
   prep.activeDrink = null;
@@ -794,27 +944,38 @@ export function serveWaitingCustomer(state: CafeState): ServeResult {
     `+${coinsEarned}c ♥+${heartsEarned}`,
     waitingCustomer.x,
     waitingCustomer.y - 32,
-    '#facc15'
+    '#facc15',
+    state.room
   );
 
+  // Seat customer either at an Indoor Lounge Table (seats 0..2) or Outdoor Garden Table (seats 3..6)
   const occupiedSeats = new Set(
     state.customers.filter((c) => c.state === 'sipping' && c.seatIndex !== null).map((c) => c.seatIndex!)
   );
-  const freeSeatIdx = GARDEN_TABLES.findIndex((_, idx) => !occupiedSeats.has(idx));
+  const allSeats = [
+    ...INDOOR_TABLES.map((t, i) => ({ idx: i, room: 'inside' as RoomId, x: t.x, y: t.y })),
+    ...GARDEN_TABLES.map((t, i) => ({ idx: i + 3, room: 'garden' as RoomId, x: t.x, y: t.y })),
+  ];
+  const freeSeat = allSeats.find((s) => !occupiedSeats.has(s.idx));
 
   waitingCustomer.heartsGiven = heartsEarned;
   waitingCustomer.dialogueText = '♥ Pure GBA vibes!';
 
-  if (freeSeatIdx !== -1) {
+  if (freeSeat) {
     waitingCustomer.state = 'sipping';
-    waitingCustomer.seatIndex = freeSeatIdx;
-    waitingCustomer.targetX = GARDEN_TABLES[freeSeatIdx].x;
-    waitingCustomer.targetY = GARDEN_TABLES[freeSeatIdx].y;
-    waitingCustomer.sipTimer = 8.5;
+    waitingCustomer.seatIndex = freeSeat.idx;
+    waitingCustomer.room = freeSeat.room;
+    if (freeSeat.room === 'garden') {
+      waitingCustomer.x = 450;
+      waitingCustomer.y = 128;
+    }
+    waitingCustomer.targetX = freeSeat.x;
+    waitingCustomer.targetY = freeSeat.y;
+    waitingCustomer.sipTimer = 10.0;
   } else {
     waitingCustomer.state = 'walking_out';
-    waitingCustomer.targetX = 392;
-    waitingCustomer.targetY = 530;
+    waitingCustomer.targetX = 356;
+    waitingCustomer.targetY = 475;
   }
 
   state.lastMessage = `Served ${recipe.name} to ${waitingCustomer.name}! +${coinsEarned} Coins & +${heartsEarned} ♥`;
@@ -828,9 +989,21 @@ export function serveWaitingCustomer(state: CafeState): ServeResult {
   };
 }
 
+/**
+ * Smart Auto-Switch QoL: Watering daisies automatically switches to the `garden` map!
+ */
 export function waterDaisyPatch(state: CafeState, daisyId: string): boolean {
   const patch = state.daisies.find((d) => d.id === daisyId);
   if (!patch) return false;
+
+  if (state.room !== 'garden') {
+    state.room = 'garden';
+    state.barista.x = 450;
+    state.barista.y = 190;
+  }
+
+  state.barista.targetX = Math.max(170, Math.min(730, patch.x));
+  state.barista.targetY = Math.max(160, Math.min(400, patch.y));
 
   if (!state.prep.holdingWateringCan) {
     state.prep.holdingWateringCan = true;
@@ -852,7 +1025,12 @@ export function waterDaisyPatch(state: CafeState, daisyId: string): boolean {
     state.coins += 2;
   }
 
-  state.cozyRating = calculateCozyRating(state.daisies, state.hearts, state.catPetBonus);
+  state.cozyRating = calculateCozyRating(
+    state.daisies,
+    state.hearts,
+    state.catPetBonus,
+    state.weather
+  );
   state.bestCozyRating = Math.max(state.bestCozyRating, state.cozyRating);
 
   spawnPopup(
@@ -860,21 +1038,26 @@ export function waterDaisyPatch(state: CafeState, daisyId: string): boolean {
     wasThirsty ? '+💧 COZY! +2c' : '+💧 FRESH!',
     patch.x,
     patch.y - 24,
-    '#38bdf8'
+    '#38bdf8',
+    'garden'
   );
 
-  state.lastMessage = `Watered ${patch.name}! +2 Coins & Cozy Rating ${state.cozyRating}%.`;
+  state.lastMessage = `Watered ${patch.name} in the Backyard Garden! +2 Coins & Cozy Rating ${state.cozyRating}%.`;
   return true;
 }
 
 export function toggleMiataHeadlights(state: CafeState): boolean {
+  if (state.room !== 'inside') {
+    state.room = 'inside';
+  }
   state.miataHeadlightsOn = !state.miataHeadlightsOn;
   spawnPopup(
     state,
     state.miataHeadlightsOn ? 'POP-UPS: ON ★' : 'POP-UPS: OFF',
     MIATA_GARAGE_BOUNDS.x,
     MIATA_GARAGE_BOUNDS.y - 40,
-    '#facc15'
+    '#facc15',
+    'inside'
   );
   state.lastMessage = state.miataHeadlightsOn
     ? '1990 Mazda Miata MX-5 pop-up headlights flipped UP! ★ Wink!'
@@ -883,8 +1066,10 @@ export function toggleMiataHeadlights(state: CafeState): boolean {
 }
 
 export function petCatCompanion(state: CafeState, catId?: 'lilo' | 'champy'): CatCompanion {
+  const sameRoomCat = state.cats.find((c) => c.room === state.room);
   const targetCat =
     (catId ? state.cats.find((c) => c.id === catId) : null) ??
+    sameRoomCat ??
     state.cats[state.hearts % state.cats.length];
 
   targetCat.state = 'purring';
@@ -894,10 +1079,22 @@ export function petCatCompanion(state: CafeState, catId?: 'lilo' | 'champy'): Ca
   state.hearts += 1;
   state.catPetBonus = Math.min(15, state.catPetBonus + 5);
   state.barista.speedBoostTimer = 6.5;
-  state.cozyRating = calculateCozyRating(state.daisies, state.hearts, state.catPetBonus);
+  state.cozyRating = calculateCozyRating(
+    state.daisies,
+    state.hearts,
+    state.catPetBonus,
+    state.weather
+  );
   state.bestCozyRating = Math.max(state.bestCozyRating, state.cozyRating);
 
-  spawnPopup(state, `♥ ${targetCat.name.toUpperCase()} ♪`, targetCat.x, targetCat.y - 24, '#fb7185');
+  spawnPopup(
+    state,
+    `♥ ${targetCat.name.toUpperCase()} ♪`,
+    targetCat.x,
+    targetCat.y - 24,
+    '#fb7185',
+    targetCat.room
+  );
 
   state.lastMessage = `Petted ${targetCat.name}! Purrrr~ ♥♪ +Speed Boost & Cozy Rating ${state.cozyRating}%!`;
   return targetCat;

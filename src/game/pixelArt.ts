@@ -2,50 +2,33 @@ import {
   CafeState,
   STATIONS,
   RECIPES,
+  INDOOR_TABLES,
   GARDEN_TABLES,
   MIATA_GARAGE_BOUNDS,
+  INSIDE_DOOR_MAT,
+  GARDEN_DOOR_MAT,
+  GARDEN_ORDER_WINDOW,
   DaisyPatch,
   CustomerEntity,
   CatCompanion,
   StationConfig,
-  ViewMode,
   getRecommendedStation,
 } from './rules';
 
 export const WORLD_WIDTH = 900;
 export const WORLD_HEIGHT = 480;
 
-export interface CameraTransform {
-  zoom: number;
-  focusX: number;
-  focusY: number;
-}
-
-export function getTargetCamera(viewMode: ViewMode): CameraTransform {
-  if (viewMode === 'indoor') {
-    return { zoom: 1.24, focusX: 508, focusY: 196 };
-  }
-  if (viewMode === 'outdoor') {
-    return { zoom: 1.22, focusX: 450, focusY: 332 };
-  }
-  return { zoom: 1.0, focusX: WORLD_WIDTH / 2, focusY: WORLD_HEIGHT / 2 };
-}
-
-export function screenToWorldWithCamera(
-  clientX: number,
-  clientY: number,
-  rect: DOMRect,
-  cam: CameraTransform
-): { x: number; y: number } {
-  if (rect.width === 0 || rect.height === 0) return { x: 0, y: 0 };
-  const canvasX = ((clientX - rect.left) / rect.width) * WORLD_WIDTH;
-  const canvasY = ((clientY - rect.top) / rect.height) * WORLD_HEIGHT;
-  const worldX = (canvasX - WORLD_WIDTH / 2) / cam.zoom + cam.focusX;
-  const worldY = (canvasY - WORLD_HEIGHT / 2) / cam.zoom + cam.focusY;
-  return { x: worldX, y: worldY };
-}
-
-export type ParticleKind = 'heart' | 'water' | 'steam' | 'sparkle' | 'pollen' | 'note';
+export type ParticleKind =
+  | 'heart'
+  | 'water'
+  | 'steam'
+  | 'sparkle'
+  | 'pollen'
+  | 'note'
+  | 'petal'
+  | 'rain'
+  | 'ripple'
+  | 'firefly';
 
 export interface PooledParticle {
   active: boolean;
@@ -60,7 +43,7 @@ export interface PooledParticle {
   color: string;
 }
 
-const POOL_CAPACITY = 130;
+const POOL_CAPACITY = 180;
 
 export class ParticlePool {
   public items: PooledParticle[] = [];
@@ -154,6 +137,18 @@ export class ParticlePool {
       if (!p.active) continue;
       p.life -= dt;
       if (p.life <= 0) {
+        if (p.kind === 'rain' && Math.random() < 0.45) {
+          // Turn raindrop impact into a ground splash ripple!
+          p.active = true;
+          p.kind = 'ripple';
+          p.vx = 0;
+          p.vy = 0;
+          p.life = 0.32;
+          p.maxLife = 0.32;
+          p.size = 6;
+          p.color = '#bae6fd';
+          continue;
+        }
         p.active = false;
         continue;
       }
@@ -235,6 +230,27 @@ function drawPixelBox(
   }
 }
 
+function drawWarmLightPool(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  radius: number,
+  alpha: number,
+  colorRgb = '254, 240, 138'
+) {
+  ctx.save();
+  ctx.fillStyle = `rgba(${colorRgb}, ${alpha * 0.45})`;
+  ctx.fillRect(px(cx - radius), px(cy - radius * 0.7), px(radius * 2), px(radius * 1.4));
+  ctx.fillStyle = `rgba(${colorRgb}, ${alpha * 0.85})`;
+  ctx.fillRect(
+    px(cx - radius * 0.55),
+    px(cy - radius * 0.4),
+    px(radius * 1.1),
+    px(radius * 0.8)
+  );
+  ctx.restore();
+}
+
 /**
  * 16x18 CHIBI RPG CHARACTER SPRITE MATRICES (Pokémon FireRed / Emerald Style)
  */
@@ -281,10 +297,7 @@ const CHIBI_CHAR_FRAME_1 = [
 ];
 
 /**
- * ============================================================================
  * MULTI-STATE ROAMING CAT COMPANION MATRICES (Lilo & Champy)
- * Walking (Swishing Tail), Sitting & Grooming (Paw Lick), Pouncing, & Napping
- * ============================================================================
  */
 const CAT_WALK_FRAME_0 = [
   '.OO......OO.....',
@@ -492,9 +505,6 @@ export function drawWaterDropIcon(
   ctx.fillRect(x - 4, y - 4, 4, 4);
 }
 
-/**
- * Draws a bright White Daisy flower with a Golden-Yellow center
- */
 function drawSingleDaisy(
   ctx: CanvasRenderingContext2D,
   x: number,
@@ -531,17 +541,15 @@ function drawSingleDaisy(
   ctx.fillRect(fx - 2, fy - 2, 2, 2);
 }
 
-/**
- * Draws a sleek Monochrome Slate/Charcoal Daisy Planter Box
- */
 function drawDaisyBed(
   ctx: CanvasRenderingContext2D,
   patch: DaisyPatch,
+  state: CafeState,
   time: number,
   hovered: boolean
 ) {
-  const w = 92;
-  const h = 58;
+  const w = 104;
+  const h = 62;
   const left = px(patch.x - w / 2);
   const top = px(patch.y - h / 2);
 
@@ -554,14 +562,15 @@ function drawDaisyBed(
   ctx.fillStyle = patch.needsWater ? '#4d7c0f' : '#22c55e';
   ctx.fillRect(left + 14, top + 12, w - 28, h - 26);
 
-  const sway = Math.sin(time * 2.6 + patch.x * 0.1) * 2;
+  const windBoost = state.weather === 'breeze' ? 3.5 : 2.0;
+  const sway = Math.sin(time * 2.8 + patch.x * 0.1) * windBoost;
   const offsets = [
-    [-24, -10],
+    [-28, -10],
     [0, -12],
-    [24, -10],
-    [-20, 8],
+    [28, -10],
+    [-22, 8],
     [4, 10],
-    [26, 8],
+    [28, 8],
   ];
   offsets.forEach(([ox, oy], idx) => {
     const localSway = idx % 2 === 0 ? sway : -sway;
@@ -569,257 +578,28 @@ function drawDaisyBed(
   });
 
   // Pixel Hydration Meter Bar
-  const barW = 68;
+  const barW = 76;
   const barX = px(patch.x - barW / 2);
   const barY = top + h - 8;
   drawPixelBox(ctx, barX, barY, barW, 5, '#090b0e', '#334155');
   const fillW = Math.round((barW * Math.max(0, Math.min(100, patch.hydration))) / 100);
-  ctx.fillStyle = patch.needsWater ? '#facc15' : '#38bdf8';
+  ctx.fillStyle = state.weather === 'rain' ? '#38bdf8' : patch.needsWater ? '#facc15' : '#22c55e';
   ctx.fillRect(barX, barY, fillW, 5);
 
-  if (patch.needsWater) {
+  if (patch.needsWater && state.weather !== 'rain') {
     const bob = Math.sin(time * 5.2 + patch.y) * 3;
     drawWaterDropIcon(ctx, patch.x, top - 16, bob);
+  } else if (state.weather === 'rain' && patch.hydration < 99) {
+    ctx.font = 'bold 6px "Press Start 2P", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#7dd3fc';
+    ctx.fillText('+RAIN 💧', patch.x, top - 6);
   }
 }
 
 /**
- * ============================================================================
- * ARCHITECTURAL ZONE 1: INDOOR MONOCHROME COFFEE SHOP (CENTER-TOP BUILDING)
- * Enclosed by dark slate walls, warm monochrome checkerboard/hardwood flooring,
- * top wall menu boards, front garden windows, cozy cat rug, and "KLASIK" welcome mat.
- * ============================================================================
- */
-function drawIndoorCoffeeShopBuilding(ctx: CanvasRenderingContext2D) {
-  const bLeft = 152;
-  const bTop = 76;
-  const bWidth = 484;
-  const bHeight = 220;
-
-  // Exterior building drop shadow on the grass
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.38)';
-  ctx.fillRect(bLeft - 6, bTop + 10, bWidth + 12, bHeight + 8);
-
-  // Outer Dark Slate Architectural Walls
-  drawPixelBox(ctx, bLeft, bTop, bWidth, bHeight, '#0f172a', '#090b0e', '#334155');
-
-  // Warm Monochrome Checkerboard / Hardwood Interior Flooring
-  const floorLeft = bLeft + 8;
-  const floorTop = bTop + 26;
-  const floorW = bWidth - 16;
-  const floorH = bHeight - 36;
-  ctx.fillStyle = '#1e2430';
-  ctx.fillRect(floorLeft, floorTop, floorW, floorH);
-
-  const tileW = 24;
-  const tileH = 22;
-  for (let r = 0; r < Math.floor(floorH / tileH); r++) {
-    for (let c = 0; c < Math.floor(floorW / tileW); c++) {
-      const isAlt = (r + c) % 2 === 0;
-      ctx.fillStyle = isAlt ? '#262d3d' : '#1b202c';
-      ctx.fillRect(floorLeft + c * tileW, floorTop + r * tileH, tileW, tileH);
-      // Subtle wood-plank / tile sheen line
-      ctx.fillStyle = '#333d52';
-      ctx.fillRect(floorLeft + c * tileW + 2, floorTop + r * tileH + 2, tileW - 4, 2);
-    }
-  }
-
-  // Rear Interior Wall Backrest + Overhead Cafe Menu Boards
-  drawPixelBox(ctx, bLeft + 8, bTop + 6, bWidth - 16, 22, '#090b0e', '#475569');
-  // Menu Board 1: Coffee & Espresso
-  drawPixelBox(ctx, bLeft + 22, bTop + 8, 190, 16, '#1e293b', '#f8fafc');
-  ctx.font = 'bold 6px "Press Start 2P", monospace';
-  ctx.textAlign = 'left';
-  ctx.fillStyle = '#facc15';
-  ctx.fillText('★ COLD BREW $14 · MOCHA $18', bLeft + 30, bTop + 19);
-
-  // Menu Board 2: Latte & Tea
-  drawPixelBox(ctx, bLeft + 260, bTop + 8, 198, 16, '#1e293b', '#f8fafc');
-  ctx.fillStyle = '#86efac';
-  ctx.fillText('★ DAISY LATTE $16 · TEA $15', bLeft + 268, bTop + 19);
-
-  // Cozy Monochrome Woven Cafe Rug on the indoor floor (where cats love to groom/nap!)
-  drawPixelBox(ctx, 514, 196, 88, 52, '#334155', '#090b0e', '#64748b');
-  drawPixelBox(ctx, 522, 204, 72, 36, '#1e293b', '#cbd5e1');
-
-  // South-Facing Cafe Wall with Garden-View Windows & Open Front Doorway
-  const wallY = bTop + bHeight - 14;
-  // Left wall segment + window
-  drawPixelBox(ctx, bLeft, wallY, 184, 14, '#0f172a', '#090b0e', '#475569');
-  drawPixelBox(ctx, bLeft + 28, wallY + 2, 126, 8, '#38bdf8', '#090b0e', '#bae6fd');
-
-  // Right wall segment + window
-  drawPixelBox(ctx, bLeft + 300, wallY, 184, 14, '#0f172a', '#090b0e', '#475569');
-  drawPixelBox(ctx, bLeft + 326, wallY + 2, 126, 8, '#38bdf8', '#090b0e', '#bae6fd');
-
-  // Front Doorway Threshold & "KLASIK" Welcome Mat (x: 336..448)
-  drawPixelBox(ctx, 344, wallY - 4, 96, 22, '#18181b', '#f8fafc', '#334155');
-  drawPixelBox(ctx, 352, wallY, 80, 14, '#090b0e', '#facc15');
-  ctx.font = 'bold 7px "Press Start 2P", monospace';
-  ctx.textAlign = 'center';
-  ctx.fillStyle = '#f8fafc';
-  ctx.fillText('KLASIK', 392, wallY + 10);
-}
-
-/**
- * ============================================================================
- * ARCHITECTURAL ZONE 2: INDOOR GARAGE BAY (RIGHT WING) & 1990 MAZDA MIATA MX-5
- * Separated by an interior steel/glass partition wall from the coffee shop!
- * ============================================================================
- */
-function drawMiataGarageBay(
-  ctx: CanvasRenderingContext2D,
-  state: CafeState,
-  time: number,
-  hoveredMiata: boolean
-) {
-  const bayLeft = 636;
-  const bayTop = 76;
-  const bayW = 228;
-  const bayH = 292;
-
-  // Exterior shadow
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.38)';
-  ctx.fillRect(bayLeft, bayTop + 10, bayW + 8, bayH + 8);
-
-  // 1. Sleek Monochrome Indoor Garage Enclosure
-  drawPixelBox(ctx, bayLeft, bayTop, bayW, bayH, '#18181b', '#090b0e', '#3f3f46');
-
-  // Interior Steel & Glass Partition Wall along x = 636 (with open arch at y = 200..254 for Lilo!)
-  drawPixelBox(ctx, bayLeft - 4, bayTop, 10, 122, '#0f172a', '#090b0e', '#64748b');
-  drawPixelBox(ctx, bayLeft - 2, bayTop + 26, 6, 80, '#38bdf8', '#090b0e'); // Glass window pane between cafe & garage!
-  drawPixelBox(ctx, bayLeft - 4, bayTop + 180, 10, 40, '#0f172a', '#090b0e', '#64748b');
-
-  // 2. High-Contrast Black & White Checkered Showroom Floor Tiles
-  const tile = 24;
-  for (let r = 0; r < 10; r++) {
-    for (let c = 0; c < 8; c++) {
-      const isWhite = (r + c) % 2 === 0;
-      ctx.fillStyle = isWhite ? '#e2e8f0' : '#1e232d';
-      ctx.fillRect(bayLeft + 18 + c * tile, bayTop + 36 + r * tile, tile, tile);
-    }
-  }
-
-  // Garage Tool Cabinet, Red/Slate Mechanics Chest & JDM Banner along top wall
-  drawPixelBox(ctx, bayLeft + 18, bayTop + 8, 84, 24, '#dc2626', '#090b0e', '#f87171');
-  ctx.fillStyle = '#f8fafc';
-  ctx.fillRect(bayLeft + 24, bayTop + 16, 72, 2);
-  ctx.fillRect(bayLeft + 24, bayTop + 22, 72, 2);
-
-  drawPixelBox(ctx, bayLeft + 114, bayTop + 8, 96, 22, '#0f172a', '#f8fafc');
-  ctx.font = 'bold 6px "Press Start 2P", monospace';
-  ctx.textAlign = 'center';
-  ctx.fillStyle = '#facc15';
-  ctx.fillText('1990 MX-5 NA', bayLeft + 162, bayTop + 22);
-
-  // 3. 1990 Mazda Miata MX-5 (NA) Top-Down 3/4 Pixel Art Sprite
-  const mx = px(MIATA_GARAGE_BOUNDS.x);
-  const my = px(MIATA_GARAGE_BOUNDS.y);
-  const carW = 88;
-  const carH = 152;
-  const cLeft = mx - carW / 2;
-  const cTop = my - carH / 2;
-
-  // Drop shadow under car
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.48)';
-  ctx.fillRect(cLeft - 6, cTop + 8, carW + 12, carH);
-
-  // 4 Wide Performance Tires
-  ctx.fillStyle = '#090b0e';
-  ctx.fillRect(cLeft - 6, cTop + 20, 8, 28);
-  ctx.fillRect(cLeft + carW - 2, cTop + 20, 8, 28);
-  ctx.fillRect(cLeft - 6, cTop + carH - 46, 8, 28);
-  ctx.fillRect(cLeft + carW - 2, cTop + carH - 46, 8, 28);
-
-  // Main Rounded Curvy NA Miata Chassis (Crystal White / Silver-Slate Two-Tone)
-  const outlineCol = hoveredMiata ? '#facc15' : '#090b0e';
-  drawPixelBox(ctx, cLeft + 4, cTop, carW - 8, carH, '#f8fafc', outlineCol, '#ffffff');
-  drawPixelBox(ctx, cLeft, cTop + 10, carW, carH - 20, '#f8fafc', outlineCol);
-
-  // Inner Body Shading & Side Character Lines
-  ctx.fillStyle = '#cbd5e1';
-  ctx.fillRect(cLeft + 4, cTop + 14, 6, carH - 28);
-  ctx.fillRect(cLeft + carW - 10, cTop + 14, 6, carH - 28);
-
-  // Hood Panel Seam Lines (Front faces DOWN toward garage driveway!)
-  ctx.strokeStyle = '#94a3b8';
-  ctx.lineWidth = 2;
-  ctx.strokeRect(cLeft + 14, cTop + 78, carW - 28, 54);
-
-  // Convertible Open Cockpit / Black Leather Bucket Seats & Dash
-  drawPixelBox(ctx, cLeft + 12, cTop + 32, carW - 24, 48, '#0f172a', '#090b0e');
-  // Curved Windshield Frame
-  drawPixelBox(ctx, cLeft + 10, cTop + 68, carW - 20, 14, '#38bdf8', '#090b0e', '#bae6fd');
-  // Driver & Passenger Headrests + Nardi Steering Wheel
-  drawPixelBox(ctx, cLeft + 18, cTop + 38, 20, 18, '#1e293b', '#090b0e', '#334155');
-  drawPixelBox(ctx, cLeft + carW - 38, cTop + 38, 20, 18, '#1e293b', '#090b0e', '#334155');
-  ctx.fillStyle = '#f8fafc';
-  ctx.fillRect(cLeft + 22, cTop + 60, 12, 4);
-
-  // Side Mirrors
-  drawPixelBox(ctx, cLeft - 8, cTop + 72, 8, 6, '#f8fafc', '#090b0e');
-  drawPixelBox(ctx, cLeft + carW, cTop + 72, 8, 6, '#f8fafc', '#090b0e');
-
-  // Iconic NA Rear Taillights
-  ctx.fillStyle = '#ef4444';
-  ctx.fillRect(cLeft + 10, cTop + 2, 18, 6);
-  ctx.fillRect(cLeft + carW - 28, cTop + 2, 18, 6);
-
-  // Front Bumper Smile Grille
-  ctx.fillStyle = '#090b0e';
-  ctx.fillRect(cLeft + 22, cTop + carH - 6, carW - 44, 4);
-
-  // ★ ICONIC 1990 MIATA POP-UP HEADLIGHTS ★
-  const hlY = cTop + carH - 26;
-  const leftHlX = cLeft + 12;
-  const rightHlX = cLeft + carW - 30;
-
-  if (state.miataHeadlightsOn) {
-    drawPixelBox(ctx, leftHlX, hlY - 4, 18, 16, '#1e293b', '#090b0e', '#475569');
-    drawPixelBox(ctx, rightHlX, hlY - 4, 18, 16, '#1e293b', '#090b0e', '#475569');
-    ctx.fillStyle = '#fef08a';
-    ctx.fillRect(leftHlX + 2, hlY + 6, 14, 6);
-    ctx.fillRect(rightHlX + 2, hlY + 6, 14, 6);
-
-    const pulseAlpha = 0.24 + Math.sin(time * 6) * 0.04;
-    ctx.fillStyle = `rgba(254, 240, 138, ${pulseAlpha})`;
-    ctx.beginPath();
-    ctx.moveTo(leftHlX, hlY + 12);
-    ctx.lineTo(leftHlX + 18, hlY + 12);
-    ctx.lineTo(leftHlX + 34, hlY + 95);
-    ctx.lineTo(leftHlX - 22, hlY + 95);
-    ctx.closePath();
-    ctx.fill();
-
-    ctx.beginPath();
-    ctx.moveTo(rightHlX, hlY + 12);
-    ctx.lineTo(rightHlX + 18, hlY + 12);
-    ctx.lineTo(rightHlX + 40, hlY + 95);
-    ctx.lineTo(rightHlX - 16, hlY + 95);
-    ctx.closePath();
-    ctx.fill();
-  } else {
-    ctx.strokeStyle = '#64748b';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(leftHlX, hlY, 18, 12);
-    ctx.strokeRect(rightHlX, hlY, 18, 12);
-  }
-
-  // Interactive Badge under Garage Bay
-  drawPixelBox(ctx, mx - 88, bayTop + bayH - 22, 176, 18, '#090b0e', '#f8fafc');
-  ctx.font = 'bold 8px "Press Start 2P", monospace';
-  ctx.textAlign = 'center';
-  ctx.fillStyle = state.miataHeadlightsOn ? '#facc15' : '#cbd5e1';
-  ctx.fillText(
-    state.miataHeadlightsOn ? '90 MIATA [H] LIGHTS:ON' : '90 MIATA [H] LIGHTS:OFF',
-    mx,
-    bayTop + bayH - 10
-  );
-}
-
-/**
- * Draws the 3D Monochrome Cafe Counter, 16x16 Pixel-Art Appliances,
- * Bouncing `▼ NEXT` Target Indicator, and Crisp On-Appliance Progress Bars
+ * Draws the 3D Monochrome Cafe Counter Appliances, Bouncing `▼ NEXT` Indicator,
+ * and On-Appliance Progress Bars
  */
 function drawStation(
   ctx: CanvasRenderingContext2D,
@@ -842,7 +622,6 @@ function drawStation(
     ctx.strokeRect(left - 4, top - 4, width + 8, height + 8);
   }
 
-  // Monochrome Stainless / Slate Counter Station Pad
   drawPixelBox(
     ctx,
     left,
@@ -927,24 +706,6 @@ function drawStation(
     } else {
       drawPixelBox(ctx, cx - 8, cy - 8, 16, 14, '#ffffff', '#090b0e');
     }
-  } else if (id === 'watering_can') {
-    const held = state.prep.holdingWateringCan;
-    drawPixelBox(
-      ctx,
-      cx - 14,
-      cy - 8,
-      28,
-      20,
-      held ? '#334155' : '#0284c7',
-      '#090b0e',
-      held ? '#64748b' : '#38bdf8'
-    );
-    if (!held) {
-      ctx.fillStyle = '#38bdf8';
-      ctx.fillRect(cx + 14, cy - 6, 8, 4);
-      ctx.fillStyle = '#facc15';
-      ctx.fillRect(cx + 20, cy - 10, 4, 8);
-    }
   } else if (id === 'trash') {
     drawPixelBox(ctx, cx - 12, cy - 10, 24, 22, '#334155', '#090b0e', '#64748b');
   }
@@ -971,7 +732,6 @@ function drawStation(
     ctx.fillStyle = '#86efac';
     ctx.fillRect(bx + 2, by + 2, Math.round((bw - 4) * pct), 3);
 
-    // Animated rising pixel steam bubbles
     const bubbleY = by - 8 - ((time * 28) % 12);
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(cx - 8, px(bubbleY), 4, 4);
@@ -991,7 +751,7 @@ function drawStation(
 }
 
 /**
- * Draws the Chibi RPG Barista using `drawSpriteMatrix`
+ * Draws the Chibi RPG Barista
  */
 function drawBarista(ctx: CanvasRenderingContext2D, state: CafeState, time: number) {
   const b = state.barista;
@@ -1049,13 +809,6 @@ function drawBarista(ctx: CanvasRenderingContext2D, state: CafeState, time: numb
   ctx.restore();
 }
 
-/**
- * Draws Multi-State Roaming Cat Companions:
- * - Lilo (White Coat, Bright Blue Eyes, Blue Collar)
- * - Champy (Black Coat, Bright Green Eyes, Bluish-Green Collar)
- * Supports: walking (swishing tail), sitting_grooming (paw lick), pouncing (hop arc),
- * napping ("Zzz"), and purring ("♥" + "♪").
- */
 function drawCatCompanion(ctx: CanvasRenderingContext2D, cat: CatCompanion, time: number) {
   const cx = px(cat.x);
   const hopY =
@@ -1064,7 +817,6 @@ function drawCatCompanion(ctx: CanvasRenderingContext2D, cat: CatCompanion, time
   const isWhite = cat.coatColor === 'white';
   const frame = Math.floor(time * 4.5 + cat.tailPhase) % 2;
 
-  // Shadow stays on ground level
   ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
   ctx.fillRect(cx - 14, px(cat.y) + 8, 28, 6);
 
@@ -1089,7 +841,6 @@ function drawCatCompanion(ctx: CanvasRenderingContext2D, cat: CatCompanion, time
 
   drawSpriteMatrix(ctx, matrix, palette, cx, cy, 2, cat.facing === 'left');
 
-  // Name tag & behavior badge
   drawPixelBox(ctx, cx - 24, px(cat.y) + 12, 48, 11, '#090b0e', '#cbd5e1');
   ctx.font = 'bold 6px "Press Start 2P", monospace';
   ctx.textAlign = 'center';
@@ -1121,9 +872,6 @@ function drawCatCompanion(ctx: CanvasRenderingContext2D, cat: CatCompanion, time
   }
 }
 
-/**
- * Draws Chibi RPG Customer + Pokémon GBA Stepped Dialogue Bubble with Bouncing Arrow
- */
 function drawCustomer(
   ctx: CanvasRenderingContext2D,
   cust: CustomerEntity,
@@ -1169,14 +917,12 @@ function drawCustomer(
     2
   );
 
-  // Customer Name Tag
   drawPixelBox(ctx, cx - 26, cy + 18, 52, 12, '#090b0e', '#94a3b8');
   ctx.font = 'bold 7px "Press Start 2P", monospace';
   ctx.textAlign = 'center';
   ctx.fillStyle = '#f8fafc';
   ctx.fillText(cust.name.toUpperCase(), cx, cy + 27);
 
-  // Classic Pokémon GBA Stepped Dialogue Box positioned cleanly to the right
   if (cust.state === 'waiting') {
     const recipe = RECIPES[cust.order];
     const drinkReady =
@@ -1201,10 +947,8 @@ function drawCustomer(
     ctx.lineWidth = 2;
     ctx.strokeRect(bx + 3, by + 3, bw - 6, bh - 6);
 
-    // Drink Mini Icon
     drawPixelBox(ctx, bx + 10, by + 12, 20, 22, recipe.color, '#090b0e', recipe.accentColor);
 
-    // Order Text
     ctx.textAlign = 'left';
     ctx.font = 'bold 8px "Press Start 2P", monospace';
     ctx.fillStyle = '#090b0e';
@@ -1220,7 +964,6 @@ function drawCustomer(
       by + 36
     );
 
-    // Classic Pokémon Bouncing Red/Gold Pixel Arrow on bottom-right of dialogue box
     const arrowBob = Math.floor(time * 5) % 2 === 0 ? 0 : 3;
     const ax = bx + bw - 16;
     const ay = by + bh - 14 + arrowBob;
@@ -1235,25 +978,638 @@ function drawCustomer(
 }
 
 /**
- * Draws Outdoor Garden Patio Umbrella Cafe Tables
+ * ============================================================================
+ * MAP 1: FULL-SCREEN 900x480 "INSIDE VIEW"
+ * (Monochrome Coffee Shop Interior, Cashier POS, Glass Pastry Display,
+ *  3 Indoor Lounge Tables, & Right-Wing Connected 1990 Miata Garage Showroom)
+ * ============================================================================
  */
-function drawOutdoorGardenTables(ctx: CanvasRenderingContext2D, time: number) {
-  GARDEN_TABLES.forEach((t) => {
+function renderInsideRoom(
+  ctx: CanvasRenderingContext2D,
+  state: CafeState,
+  time: number,
+  hoveredStationId: string | null,
+  hoveredMiata: boolean
+) {
+  // 1. Outer Architectural Slate/Brick Perimeter Frame
+  drawPixelBox(ctx, 16, 14, 868, 452, '#0f172a', '#f8fafc', '#334155');
+
+  // 2. Left/Center: Monochrome Checkered & Hardwood Cafe Flooring (x: 24..582, y: 84..456)
+  const tile = 28;
+  for (let r = 0; r < 14; r++) {
+    for (let c = 0; c < 20; c++) {
+      const tx = 26 + c * tile;
+      const ty = 84 + r * tile;
+      if (tx >= 584 || ty >= 456) continue;
+      const isAlt = (r + c) % 2 === 0;
+      ctx.fillStyle = isAlt ? '#262e3d' : '#1b2230';
+      ctx.fillRect(tx, ty, tile, tile);
+      ctx.fillStyle = '#313b4f';
+      ctx.fillRect(tx + 2, ty + 2, tile - 4, 2);
+    }
+  }
+
+  // 3. Top Interior Wall (x: 24..582, y: 20..84) with Dynamic Outdoor Window & Menu Boards
+  drawPixelBox(ctx, 24, 20, 558, 64, '#111622', '#090b0e', '#334155');
+
+  // ★ DYNAMIC OUTDOOR-FACING CAFE WINDOW (x: 44..228, y: 26..76) ★
+  // Shows live sky color (Day / Sunset / Night), garden hedge, and Rain/Petals!
+  const skyColor =
+    state.timeOfDay === 'day'
+      ? '#38bdf8'
+      : state.timeOfDay === 'sunset'
+        ? '#f97316'
+        : '#0f172a';
+  drawPixelBox(ctx, 44, 26, 184, 50, skyColor, '#f8fafc');
+  if (state.timeOfDay === 'sunset') {
+    ctx.fillStyle = '#fb7185';
+    ctx.fillRect(46, 28, 180, 20);
+    ctx.fillStyle = '#fde047';
+    ctx.fillRect(118, 44, 18, 14); // Setting sun
+  } else if (state.timeOfDay === 'night') {
+    ctx.fillStyle = '#fef08a';
+    ctx.fillRect(72, 34, 4, 4);
+    ctx.fillRect(142, 38, 4, 4);
+    ctx.fillRect(190, 32, 8, 8); // Crescent moon hint
+  } else {
+    ctx.fillStyle = '#fef08a';
+    ctx.fillRect(184, 32, 14, 14); // Bright sun
+  }
+  // Distant green daisy hedge visible through the window
+  ctx.fillStyle = '#16a34a';
+  ctx.fillRect(46, 60, 180, 14);
+  ctx.fillStyle = '#ffffff';
+  for (let wx = 58; wx < 216; wx += 28) {
+    ctx.fillRect(wx, 64, 4, 4);
+  }
+  // Weather streaks inside the window
+  if (state.weather === 'rain') {
+    ctx.fillStyle = '#bae6fd';
+    for (let i = 0; i < 8; i++) {
+      const rx = 54 + ((i * 23 + Math.floor(time * 90)) % 164);
+      const ry = 30 + ((i * 17 + Math.floor(time * 140)) % 40);
+      ctx.fillRect(rx, ry, 2, 8);
+    }
+  } else if (state.weather === 'breeze') {
+    ctx.fillStyle = '#ffffff';
+    for (let i = 0; i < 5; i++) {
+      const pxW = 54 + ((i * 33 + Math.floor(time * 45)) % 164);
+      const pyW = 34 + ((i * 19 + Math.floor(time * 25)) % 34);
+      ctx.fillRect(pxW, pyW, 4, 4);
+    }
+  }
+  // Window Mullion Bars
+  ctx.fillStyle = '#090b0e';
+  ctx.fillRect(134, 26, 4, 50);
+  ctx.fillRect(44, 50, 184, 3);
+
+  // Overhead Wall Menu Boards (x: 248..568, y: 34..76)
+  drawPixelBox(ctx, 248, 34, 152, 42, '#1e293b', '#f8fafc', '#475569');
+  ctx.font = 'bold 6px "Press Start 2P", monospace';
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#facc15';
+  ctx.fillText('★ ESPRESSO BAR', 256, 46);
+  ctx.fillStyle = '#f8fafc';
+  ctx.fillText('COLD BREW  $14', 256, 58);
+  ctx.fillText('MIATA MOCHA $18', 256, 69);
+
+  drawPixelBox(ctx, 412, 34, 156, 42, '#1e293b', '#f8fafc', '#475569');
+  ctx.fillStyle = '#86efac';
+  ctx.fillText('★ GARDEN SPECIALS', 420, 46);
+  ctx.fillStyle = '#f8fafc';
+  ctx.fillText('DAISY LATTE $16', 420, 58);
+  ctx.fillText('CATNIP TEA  $15', 420, 69);
+
+  // Hanging Warm Pendant Lamps along the top bar
+  [136, 238, 406].forEach((lx) => {
+    ctx.fillStyle = '#090b0e';
+    ctx.fillRect(lx - 2, 16, 4, 10);
+    drawPixelBox(ctx, lx - 10, 24, 20, 8, '#facc15', '#090b0e', '#fef08a');
+  });
+
+  // 4. Soft Woven Cafe Rug for Lilo (x: 444..552, y: 218..276)
+  drawPixelBox(ctx, 444, 218, 108, 58, '#334155', '#090b0e', '#64748b');
+  drawPixelBox(ctx, 454, 226, 88, 42, '#1e293b', '#cbd5e1');
+
+  // 5. Rear Brewing Bar (x: 68..540, y: 114..172)
+  drawPixelBox(ctx, 68, 116, 472, 46, '#0f172a', '#090b0e', '#334155');
+  drawPixelBox(ctx, 68, 162, 472, 14, '#1e293b', '#090b0e');
+
+  // 6. Front Counter with Cashier POS Register, Glass Pastry Display Case, & Pickup Bar
+  drawPixelBox(ctx, 68, 218, 360, 38, '#0f172a', '#090b0e', '#475569');
+  drawPixelBox(ctx, 68, 256, 360, 18, '#334155', '#090b0e');
+  ctx.fillStyle = '#090b0e';
+  for (let rx = 80; rx < 418; rx += 16) {
+    ctx.fillRect(rx, 258, 4, 14);
+  }
+
+  // ★ CASHIER POS REGISTER (x = 84..148, y = 206..248) ★
+  drawPixelBox(ctx, 84, 210, 58, 34, '#1e293b', '#090b0e', '#94a3b8');
+  drawPixelBox(ctx, 90, 214, 34, 16, '#064e3b', '#090b0e');
+  ctx.font = 'bold 6px "Press Start 2P", monospace';
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#4ade80';
+  ctx.fillText('$ POS', 107, 225);
+  // Receipt slip
+  ctx.fillStyle = '#f8fafc';
+  ctx.fillRect(130, 212, 8, 12);
+
+  // ★ GLASS PASTRY DISPLAY CASE (x = 162..276, y = 208..250) ★
+  drawPixelBox(ctx, 162, 210, 112, 36, '#38bdf8', '#090b0e', '#bae6fd');
+  drawPixelBox(ctx, 166, 216, 104, 26, '#0f172a');
+  // Golden Croissant, Matcha Roll & Berry Danish inside the glass case
+  drawPixelBox(ctx, 174, 224, 22, 12, '#f59e0b', '#090b0e', '#fde047'); // Croissant
+  drawPixelBox(ctx, 206, 224, 22, 12, '#22c55e', '#090b0e', '#bbf7d0'); // Matcha Roll
+  drawPixelBox(ctx, 238, 224, 22, 12, '#f43f5e', '#090b0e', '#fecdd3'); // Berry Tart
+  ctx.font = 'bold 6px "Press Start 2P", monospace';
+  ctx.fillStyle = '#e2e8f0';
+  ctx.fillText('PASTRIES', 218, 255);
+
+  // Render the 7 Indoor Brewing & Pickup Stations (exclude watering_can which is in GARDEN)
+  const recommendedStation =
+    state.prep.processingStation === null ? getRecommendedStation(state) : null;
+  STATIONS.filter((s) => s.id !== 'watering_can').forEach((station) => {
+    drawStation(
+      ctx,
+      station,
+      state,
+      time,
+      hoveredStationId === station.id,
+      recommendedStation === station.id
+    );
+  });
+
+  // 7. 3 Cozy Indoor Seating Lounge Tables with Chairs (y: 340..400)
+  INDOOR_TABLES.forEach((t) => {
     ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
     ctx.fillRect(t.x - 36, t.y + 8, 72, 16);
-    // Cafe Stools
-    drawPixelBox(ctx, t.x - 40, t.y - 8, 16, 16, '#334155', '#090b0e', '#64748b');
-    drawPixelBox(ctx, t.x + 24, t.y - 8, 16, 16, '#334155', '#090b0e', '#64748b');
-    // Monochrome Bistro Table Top
+    drawPixelBox(ctx, t.x - 40, t.y - 8, 16, 18, '#334155', '#090b0e', '#64748b');
+    drawPixelBox(ctx, t.x + 24, t.y - 8, 16, 18, '#334155', '#090b0e', '#64748b');
     drawPixelBox(ctx, t.x - 24, t.y - 18, 48, 28, '#f8fafc', '#090b0e', '#ffffff');
-    // Striped Patio Umbrella Pole & Canopy Hint + Daisy Vase
-    drawSingleDaisy(ctx, t.x, t.y - 10, Math.sin(time * 2) * 1, true);
+    // Mini warm table lamp on each indoor table
+    drawPixelBox(ctx, t.x - 5, t.y - 14, 10, 10, '#facc15', '#090b0e', '#fef08a');
   });
+
+  // 8. South Doorway Mat leading to the Backyard Daisy Garden (`INSIDE_DOOR_MAT`)
+  const dm = INSIDE_DOOR_MAT;
+  drawPixelBox(
+    ctx,
+    dm.x - dm.width / 2,
+    dm.y - dm.height / 2,
+    dm.width,
+    dm.height,
+    '#14532d',
+    '#facc15',
+    '#22c55e'
+  );
+  ctx.font = 'bold 7px "Press Start 2P", monospace';
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#fef08a';
+  ctx.fillText('▼ TO GARDEN [V]', dm.x, dm.y + 4);
+
+  // 9. RIGHT WING: CONNECTED 1990 MIATA GARAGE SHOWROOM (x: 586..876, y: 20..456)
+  const bayLeft = 588;
+  const bayTop = 20;
+  const bayW = 288;
+  const bayH = 436;
+
+  drawPixelBox(ctx, bayLeft, bayTop, bayW, bayH, '#18181b', '#090b0e', '#3f3f46');
+
+  // Interior Steel & Glass Partition Wall at x = 584 (with open doorway arch at y = 188..276)
+  drawPixelBox(ctx, 580, 20, 12, 168, '#0f172a', '#090b0e', '#64748b');
+  drawPixelBox(ctx, 582, 42, 8, 124, '#38bdf8', '#090b0e', '#bae6fd'); // Glass showroom partition
+  drawPixelBox(ctx, 580, 276, 12, 180, '#0f172a', '#090b0e', '#64748b');
+  drawPixelBox(ctx, 582, 296, 8, 130, '#38bdf8', '#090b0e', '#bae6fd');
+
+  // High-Contrast Black & White Checkered Garage Showroom Floor
+  const gTile = 28;
+  for (let r = 0; r < 12; r++) {
+    for (let c = 0; c < 9; c++) {
+      const isWhite = (r + c) % 2 === 0;
+      ctx.fillStyle = isWhite ? '#e2e8f0' : '#1e232d';
+      ctx.fillRect(bayLeft + 18 + c * gTile, bayTop + 68 + r * gTile, gTile, gTile);
+    }
+  }
+
+  // Red Mechanic Tool Chest + Spare Performance Tire Rack + JDM Plaque
+  drawPixelBox(ctx, bayLeft + 18, bayTop + 14, 92, 38, '#dc2626', '#090b0e', '#f87171');
+  ctx.fillStyle = '#f8fafc';
+  ctx.fillRect(bayLeft + 26, bayTop + 26, 76, 3);
+  ctx.fillRect(bayLeft + 26, bayTop + 34, 76, 3);
+  ctx.fillRect(bayLeft + 26, bayTop + 42, 76, 3);
+
+  // Spare Tire Rack (4 stacked performance slicks)
+  drawPixelBox(ctx, bayLeft + 120, bayTop + 14, 72, 38, '#1e293b', '#090b0e', '#64748b');
+  for (let ti = 0; ti < 4; ti++) {
+    drawPixelBox(ctx, bayLeft + 126 + ti * 15, bayTop + 20, 12, 26, '#090b0e', '#475569');
+  }
+
+  // Showroom Banner
+  drawPixelBox(ctx, bayLeft + 200, bayTop + 14, 74, 38, '#0f172a', '#f8fafc');
+  ctx.font = 'bold 6px "Press Start 2P", monospace';
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#facc15';
+  ctx.fillText('1990 NA', bayLeft + 237, bayTop + 30);
+  ctx.fillStyle = '#f8fafc';
+  ctx.fillText('MX-5 ★', bayLeft + 237, bayTop + 42);
+
+  // 1990 Mazda Miata MX-5 (NA) Top-Down 3/4 Pixel Art Sprite
+  const mx = px(MIATA_GARAGE_BOUNDS.x);
+  const my = px(MIATA_GARAGE_BOUNDS.y);
+  const carW = 92;
+  const carH = 156;
+  const cLeft = mx - carW / 2;
+  const cTop = my - carH / 2;
+
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.48)';
+  ctx.fillRect(cLeft - 6, cTop + 8, carW + 12, carH);
+
+  ctx.fillStyle = '#090b0e';
+  ctx.fillRect(cLeft - 6, cTop + 20, 8, 28);
+  ctx.fillRect(cLeft + carW - 2, cTop + 20, 8, 28);
+  ctx.fillRect(cLeft - 6, cTop + carH - 46, 8, 28);
+  ctx.fillRect(cLeft + carW - 2, cTop + carH - 46, 8, 28);
+
+  const outlineCol = hoveredMiata ? '#facc15' : '#090b0e';
+  drawPixelBox(ctx, cLeft + 4, cTop, carW - 8, carH, '#f8fafc', outlineCol, '#ffffff');
+  drawPixelBox(ctx, cLeft, cTop + 10, carW, carH - 20, '#f8fafc', outlineCol);
+
+  ctx.fillStyle = '#cbd5e1';
+  ctx.fillRect(cLeft + 4, cTop + 14, 6, carH - 28);
+  ctx.fillRect(cLeft + carW - 10, cTop + 14, 6, carH - 28);
+
+  ctx.strokeStyle = '#94a3b8';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(cLeft + 14, cTop + 80, carW - 28, 54);
+
+  drawPixelBox(ctx, cLeft + 12, cTop + 32, carW - 24, 48, '#0f172a', '#090b0e');
+  drawPixelBox(ctx, cLeft + 10, cTop + 68, carW - 20, 14, '#38bdf8', '#090b0e', '#bae6fd');
+  drawPixelBox(ctx, cLeft + 18, cTop + 38, 20, 18, '#1e293b', '#090b0e', '#334155');
+  drawPixelBox(ctx, cLeft + carW - 38, cTop + 38, 20, 18, '#1e293b', '#090b0e', '#334155');
+  ctx.fillStyle = '#f8fafc';
+  ctx.fillRect(cLeft + 22, cTop + 60, 12, 4);
+
+  drawPixelBox(ctx, cLeft - 8, cTop + 72, 8, 6, '#f8fafc', '#090b0e');
+  drawPixelBox(ctx, cLeft + carW, cTop + 72, 8, 6, '#f8fafc', '#090b0e');
+
+  ctx.fillStyle = '#ef4444';
+  ctx.fillRect(cLeft + 10, cTop + 2, 18, 6);
+  ctx.fillRect(cLeft + carW - 28, cTop + 2, 18, 6);
+
+  ctx.fillStyle = '#090b0e';
+  ctx.fillRect(cLeft + 22, cTop + carH - 6, carW - 44, 4);
+
+  // ★ ICONIC 1990 MIATA POP-UP HEADLIGHTS ★
+  const hlY = cTop + carH - 26;
+  const leftHlX = cLeft + 12;
+  const rightHlX = cLeft + carW - 30;
+
+  if (state.miataHeadlightsOn) {
+    drawPixelBox(ctx, leftHlX, hlY - 4, 18, 16, '#1e293b', '#090b0e', '#475569');
+    drawPixelBox(ctx, rightHlX, hlY - 4, 18, 16, '#1e293b', '#090b0e', '#475569');
+    ctx.fillStyle = '#fef08a';
+    ctx.fillRect(leftHlX + 2, hlY + 6, 14, 6);
+    ctx.fillRect(rightHlX + 2, hlY + 6, 14, 6);
+
+    const beamAlpha =
+      state.timeOfDay === 'night'
+        ? 0.45
+        : state.timeOfDay === 'sunset'
+          ? 0.34
+          : 0.22;
+    ctx.fillStyle = `rgba(254, 240, 138, ${beamAlpha})`;
+    ctx.beginPath();
+    ctx.moveTo(leftHlX, hlY + 12);
+    ctx.lineTo(leftHlX + 18, hlY + 12);
+    ctx.lineTo(leftHlX + 38, hlY + 108);
+    ctx.lineTo(leftHlX - 24, hlY + 108);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.moveTo(rightHlX, hlY + 12);
+    ctx.lineTo(rightHlX + 18, hlY + 12);
+    ctx.lineTo(rightHlX + 44, hlY + 108);
+    ctx.lineTo(rightHlX - 18, hlY + 108);
+    ctx.closePath();
+    ctx.fill();
+  } else {
+    ctx.strokeStyle = '#64748b';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(leftHlX, hlY, 18, 12);
+    ctx.strokeRect(rightHlX, hlY, 18, 12);
+  }
+
+  drawPixelBox(ctx, mx - 92, bayTop + bayH - 32, 184, 20, '#090b0e', '#f8fafc');
+  ctx.font = 'bold 8px "Press Start 2P", monospace';
+  ctx.textAlign = 'center';
+  ctx.fillStyle = state.miataHeadlightsOn ? '#facc15' : '#cbd5e1';
+  ctx.fillText(
+    state.miataHeadlightsOn ? '90 MIATA [H] LIGHTS:ON' : '90 MIATA [H] LIGHTS:OFF',
+    mx,
+    bayTop + bayH - 19
+  );
+}
+
+/**
+ * ============================================================================
+ * MAP 2: FULL-SCREEN 900x480 "GARDEN VIEW"
+ * (Top Veranda with Pass-Through Order Window, Stone Pathways, Overhead Fairy
+ *  String Lanterns, Center Watering Well, 4 Umbrella Lounge Tables, & 6 Daisy Beds)
+ * ============================================================================
+ */
+function renderGardenRoom(
+  ctx: CanvasRenderingContext2D,
+  state: CafeState,
+  time: number,
+  hoveredDaisyId: string | null,
+  hoveredStationId: string | null
+) {
+  // 1. Lush GBA Tiered Pixel Grass Field (900x480)
+  const tileSize = 32;
+  for (let row = 0; row < Math.ceil(WORLD_HEIGHT / tileSize); row++) {
+    for (let col = 0; col < Math.ceil(WORLD_WIDTH / tileSize); col++) {
+      const isAlt = (row + col) % 2 === 0;
+      ctx.fillStyle = isAlt ? '#4ade80' : '#22c55e';
+      ctx.fillRect(col * tileSize, row * tileSize, tileSize, tileSize);
+
+      if ((row * 7 + col * 11) % 4 === 0) {
+        const windAmp = state.weather === 'breeze' ? 3 : 1.5;
+        const sway = Math.round(Math.sin(time * 2.8 + col) * windAmp);
+        ctx.fillStyle = '#15803d';
+        ctx.fillRect(col * tileSize + 10 + sway, row * tileSize + 12, 4, 8);
+        ctx.fillRect(col * tileSize + 16 + sway, row * tileSize + 14, 4, 6);
+      }
+    }
+  }
+
+  // 2. Wrought-Iron & Slate Backyard Perimeter Fence
+  ctx.fillStyle = '#090b0e';
+  ctx.fillRect(16, 462, WORLD_WIDTH - 32, 6);
+  for (let fx = 24; fx < WORLD_WIDTH - 24; fx += 32) {
+    drawPixelBox(ctx, fx, 452, 10, 20, '#334155', '#090b0e', '#94a3b8');
+  }
+
+  // 3. Stone Pathways radiating from the Veranda Door to the Center Watering Well & Lounge Tables
+  const paths = [
+    { x: 450, y: 140, w: 96, h: 24 },
+    { x: 450, y: 174, w: 96, h: 24 },
+    { x: 450, y: 208, w: 104, h: 24 },
+    { x: 450, y: 254, w: 148, h: 86 }, // Central stone plaza around the Watering Well
+    { x: 356, y: 254, w: 64, h: 26 },
+    { x: 544, y: 254, w: 64, h: 26 },
+    { x: 450, y: 318, w: 96, h: 24 },
+    { x: 450, y: 356, w: 96, h: 24 },
+    { x: 450, y: 394, w: 96, h: 24 },
+  ];
+  paths.forEach((s) => {
+    drawPixelBox(ctx, s.x - s.w / 2, s.y - s.h / 2, s.w, s.h, '#cbd5e1', '#090b0e', '#f8fafc');
+  });
+
+  // 4. TOP VERANDA: Back Facade of the Klasik Cafe Building (x: 40..860, y: 14..116)
+  drawPixelBox(ctx, 40, 14, 820, 98, '#0f172a', '#090b0e', '#334155');
+  // Monochrome Striped Awning
+  const stripeCount = 18;
+  const stripeW = 820 / stripeCount;
+  for (let i = 0; i < stripeCount; i++) {
+    drawPixelBox(
+      ctx,
+      40 + i * stripeW,
+      14,
+      stripeW,
+      28,
+      i % 2 === 0 ? '#111318' : '#f8fafc',
+      '#090b0e'
+    );
+  }
+  drawPixelBox(ctx, 210, 18, 480, 26, '#090b0e', '#f8fafc', '#334155');
+  ctx.font = 'bold 10px "Press Start 2P", monospace';
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#facc15';
+  ctx.fillText('KLASIK — BACKYARD DAISY GARDEN ★', 450, 36);
+
+  // ★ VERANDA PASS-THROUGH ORDER WINDOW (`GARDEN_ORDER_WINDOW` at x = 260, y = 82) ★
+  const ow = GARDEN_ORDER_WINDOW;
+  const waitingCustomer = state.customers.find((c) => c.state === 'waiting');
+  const orderRecipe = waitingCustomer ? RECIPES[waitingCustomer.order] : null;
+  drawPixelBox(
+    ctx,
+    ow.x - ow.width / 2,
+    ow.y - ow.height / 2,
+    ow.width,
+    ow.height,
+    '#1e293b',
+    '#facc15',
+    '#475569'
+  );
+  drawPixelBox(
+    ctx,
+    ow.x - ow.width / 2 + 6,
+    ow.y - ow.height / 2 + 6,
+    ow.width - 12,
+    ow.height - 12,
+    '#f8fafc',
+    '#090b0e'
+  );
+  ctx.font = 'bold 6px "Press Start 2P", monospace';
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#090b0e';
+  ctx.fillText(
+    waitingCustomer && orderRecipe
+      ? `${waitingCustomer.name.toUpperCase()}: ${orderRecipe.shortName.toUpperCase()}`
+      : 'PASS-THROUGH BAR',
+    ow.x,
+    ow.y - 4
+  );
+  ctx.font = 'bold 13px "VT323", monospace';
+  ctx.fillStyle = '#047857';
+  ctx.fillText(
+    `STEP ${state.prep.currentStepIndex}/3 · TAP TO BREW`,
+    ow.x,
+    ow.y + 11
+  );
+
+  // North Doorway Mat leading back INSIDE (`GARDEN_DOOR_MAT` at x = 450, y = 102)
+  const gdm = GARDEN_DOOR_MAT;
+  drawPixelBox(
+    ctx,
+    gdm.x - gdm.width / 2,
+    gdm.y - gdm.height / 2,
+    gdm.width,
+    gdm.height,
+    '#18181b',
+    '#facc15',
+    '#334155'
+  );
+  ctx.font = 'bold 7px "Press Start 2P", monospace';
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#fef08a';
+  ctx.fillText('▲ TO CAFE [V]', gdm.x, gdm.y + 4);
+
+  // Decorative Veranda Window on Right Side (x = 640, y = 82)
+  drawPixelBox(ctx, 576, 62, 136, 36, '#38bdf8', '#f8fafc', '#bae6fd');
+  ctx.fillStyle = '#090b0e';
+  ctx.fillRect(642, 62, 4, 36);
+
+  // 5. ★ CENTER GARDEN WATERING WELL (`x = 450, y = 254`) ★
+  const wellX = 450;
+  const wellY = 254;
+  const wellHovered = hoveredStationId === 'watering_can';
+  drawPixelBox(
+    ctx,
+    wellX - 34,
+    wellY - 22,
+    68,
+    46,
+    '#475569',
+    wellHovered ? '#facc15' : '#090b0e',
+    '#94a3b8'
+  );
+  drawPixelBox(ctx, wellX - 24, wellY - 14, 48, 28, '#0284c7', '#090b0e', '#38bdf8');
+  // Wooden Well Roof Posts & Pitch Roof
+  drawPixelBox(ctx, wellX - 30, wellY - 38, 8, 20, '#78350f', '#090b0e');
+  drawPixelBox(ctx, wellX + 22, wellY - 38, 8, 20, '#78350f', '#090b0e');
+  drawPixelBox(ctx, wellX - 38, wellY - 46, 76, 12, '#1e293b', '#090b0e', '#475569');
+  // Slate Watering Can beside the well
+  drawPixelBox(ctx, wellX + 18, wellY + 2, 22, 16, '#0284c7', '#090b0e', '#38bdf8');
+  drawPixelBox(ctx, wellX - 36, wellY + 26, 72, 12, '#090b0e', '#475569');
+  ctx.font = 'bold 6px "Press Start 2P", monospace';
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#7dd3fc';
+  ctx.fillText('WELL [W]', wellX, wellY + 35);
+
+  // 6. ★ 4 OUTDOOR UMBRELLA LOUNGE TABLES (`GARDEN_TABLES`) ★
+  GARDEN_TABLES.forEach((t, idx) => {
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
+    ctx.fillRect(t.x - 40, t.y + 8, 80, 18);
+    // Bistro Chairs
+    drawPixelBox(ctx, t.x - 42, t.y - 8, 16, 18, '#334155', '#090b0e', '#64748b');
+    drawPixelBox(ctx, t.x + 26, t.y - 8, 16, 18, '#334155', '#090b0e', '#64748b');
+    // Table Top
+    drawPixelBox(ctx, t.x - 26, t.y - 18, 52, 30, '#f8fafc', '#090b0e', '#ffffff');
+    // Striped Cafe Umbrella Canopy Hint above table
+    drawPixelBox(
+      ctx,
+      t.x - 28,
+      t.y - 36,
+      56,
+      14,
+      idx % 2 === 0 ? '#0f172a' : '#1e293b',
+      '#f8fafc',
+      '#facc15'
+    );
+    ctx.fillStyle = '#090b0e';
+    ctx.fillRect(t.x - 2, t.y - 22, 4, 10);
+    drawSingleDaisy(ctx, t.x, t.y - 8, Math.sin(time * 2 + idx) * 1, true);
+  });
+
+  // 7. ★ 6 BLOOMING DAISY PLANTER BEDS ★
+  state.daisies.forEach((patch) => {
+    drawDaisyBed(ctx, patch, state, time, hoveredDaisyId === patch.id);
+  });
+
+  // 8. ★ OVERHEAD FAIRY STRING LANTERNS ★
+  [148, 294].forEach((ly) => {
+    ctx.strokeStyle = '#1e293b';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(110, ly);
+    ctx.quadraticCurveTo(450, ly + 18, 790, ly);
+    ctx.stroke();
+
+    for (let i = 1; i <= 7; i++) {
+      const frac = i / 8;
+      const bx = 110 + frac * 680;
+      const by = ly + Math.sin(frac * Math.PI) * 9;
+      const isLit = state.timeOfDay !== 'day';
+      drawPixelBox(
+        ctx,
+        bx - 4,
+        by,
+        8,
+        8,
+        isLit ? '#fef08a' : '#e2e8f0',
+        '#090b0e'
+      );
+    }
+  });
+}
+
+/**
+ * Renders Ambient Day / Sunset / Night Lighting Tint & Glowing Lamp/Headlight Halos
+ */
+function renderAmbientLighting(
+  ctx: CanvasRenderingContext2D,
+  state: CafeState,
+  time: number
+) {
+  if (state.timeOfDay === 'day') return;
+
+  const isNight = state.timeOfDay === 'night';
+  const pulse = 0.92 + Math.sin(time * 4) * 0.08;
+
+  // 1. Ambient Color Overlay
+  ctx.fillStyle = isNight
+    ? 'rgba(10, 15, 34, 0.42)'
+    : 'rgba(234, 88, 12, 0.16)';
+  ctx.fillRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
+
+  // 2. Warm Glowing Light Pools around Lamps, Windows, Lanterns & Headlights
+  const glowAlpha = (isNight ? 0.34 : 0.22) * pulse;
+
+  if (state.room === 'inside') {
+    // Pendant Lamps over Brewing Bar
+    [120, 296, 464].forEach((lx) => {
+      drawWarmLightPool(ctx, lx, 120, 68, glowAlpha);
+    });
+    // Indoor Table Lamps
+    INDOOR_TABLES.forEach((t) => {
+      drawWarmLightPool(ctx, t.x, t.y - 6, 48, glowAlpha * 0.85);
+    });
+    // 1990 Miata MX-5 Pop-Up Headlight Glow
+    if (state.miataHeadlightsOn) {
+      drawWarmLightPool(
+        ctx,
+        MIATA_GARAGE_BOUNDS.x,
+        MIATA_GARAGE_BOUNDS.y + 92,
+        78,
+        glowAlpha * 1.2
+      );
+    }
+  } else {
+    // Garden Pass-Through Order Window & Veranda Window Glow
+    drawWarmLightPool(ctx, GARDEN_ORDER_WINDOW.x, GARDEN_ORDER_WINDOW.y + 18, 76, glowAlpha);
+    drawWarmLightPool(ctx, 644, 96, 62, glowAlpha * 0.8);
+
+    // Overhead Fairy String Lanterns Glow
+    [148, 294].forEach((ly) => {
+      for (let i = 1; i <= 7; i += 2) {
+        const frac = i / 8;
+        const bx = 110 + frac * 680;
+        const by = ly + Math.sin(frac * Math.PI) * 9;
+        drawWarmLightPool(ctx, bx, by + 6, 42, glowAlpha * 0.85);
+      }
+    });
+
+    // Night Fireflies in the Backyard Daisy Garden!
+    if (isNight) {
+      for (let f = 0; f < 10; f++) {
+        const fx = 90 + ((f * 83 + Math.sin(time * 1.4 + f) * 28) % 720);
+        const fy = 150 + ((f * 57 + Math.cos(time * 1.8 + f * 2) * 22) % 290);
+        const blink = 0.5 + 0.5 * Math.sin(time * 5 + f * 1.7);
+        ctx.fillStyle = `rgba(190, 242, 100, ${blink * 0.4})`;
+        ctx.fillRect(px(fx - 4), px(fy - 4), 10, 10);
+        ctx.fillStyle = '#ecfccb';
+        ctx.fillRect(px(fx), px(fy), 4, 4);
+      }
+    }
+  }
 }
 
 /**
  * ============================================================================
  * MAIN GBA WORLD RENDERER ("KLASIK - GARDEN GARAGE CAFE ★")
+ * Renders either the full-screen INSIDE map or the full-screen GARDEN map.
  * ============================================================================
  */
 export function renderCafeWorld(
@@ -1263,140 +1619,56 @@ export function renderCafeWorld(
   time: number,
   hoveredStationId: string | null,
   hoveredDaisyId: string | null,
-  hoveredMiata = false,
-  camera: CameraTransform = { zoom: 1, focusX: WORLD_WIDTH / 2, focusY: WORLD_HEIGHT / 2 }
+  hoveredMiata = false
 ) {
   ctx.save();
   ctx.imageSmoothingEnabled = false;
 
-  // Clear outer backdrop
   ctx.fillStyle = '#0b0d12';
   ctx.fillRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
 
-  // Apply smooth camera transform (ALL / INDOOR / OUTDOOR)
-  ctx.translate(WORLD_WIDTH / 2, WORLD_HEIGHT / 2);
-  ctx.scale(camera.zoom, camera.zoom);
-  ctx.translate(-camera.focusX, -camera.focusY);
-
-  // 1. ARCHITECTURAL ZONE 3: OUTDOOR DAISY GARDEN PATIO (Left & Bottom Yard)
-  const tileSize = 32;
-  for (let row = 0; row < Math.ceil(WORLD_HEIGHT / tileSize); row++) {
-    for (let col = 0; col < Math.ceil(WORLD_WIDTH / tileSize); col++) {
-      const isAlt = (row + col) % 2 === 0;
-      ctx.fillStyle = isAlt ? '#4ade80' : '#22c55e';
-      ctx.fillRect(col * tileSize, row * tileSize, tileSize, tileSize);
-
-      if ((row * 7 + col * 11) % 4 === 0) {
-        const sway = Math.round(Math.sin(time * 2.5 + col) * 2);
-        ctx.fillStyle = '#15803d';
-        ctx.fillRect(col * tileSize + 10 + sway, row * tileSize + 12, 4, 8);
-        ctx.fillRect(col * tileSize + 16 + sway, row * tileSize + 14, 4, 6);
-      }
-    }
+  // 1. Render Active Full-Screen 900x480 Map (`inside` or `garden`)
+  if (state.room === 'inside') {
+    renderInsideRoom(ctx, state, time, hoveredStationId, hoveredMiata);
+  } else {
+    renderGardenRoom(ctx, state, time, hoveredDaisyId, hoveredStationId);
   }
 
-  // Wrought-Iron & Slate Perimeter Garden Fencing
-  ctx.fillStyle = '#090b0e';
-  ctx.fillRect(20, 20, WORLD_WIDTH - 40, 8);
-  for (let fx = 28; fx < WORLD_WIDTH - 28; fx += 28) {
-    drawPixelBox(ctx, fx, 10, 10, 22, '#334155', '#090b0e', '#94a3b8');
-  }
-
-  // Stone Stepping Walkway from Garden Gate up to the Indoor Cafe Welcome Mat
-  const stones = [
-    { x: 392, y: 456, w: 96, h: 22 },
-    { x: 392, y: 422, w: 100, h: 22 },
-    { x: 392, y: 388, w: 106, h: 22 },
-    { x: 392, y: 352, w: 114, h: 24 },
-    { x: 392, y: 318, w: 122, h: 24 },
-  ];
-  stones.forEach((s) => {
-    drawPixelBox(ctx, s.x - s.w / 2, s.y - s.h / 2, s.w, s.h, '#cbd5e1', '#090b0e', '#f8fafc');
-  });
-
-  // 2. ARCHITECTURAL ZONE 1: INDOOR MONOCHROME COFFEE SHOP (Center-Top Building)
-  drawIndoorCoffeeShopBuilding(ctx);
-
-  // 3. ARCHITECTURAL ZONE 2: INDOOR GARAGE BAY (Right Wing) & 1990 MAZDA MIATA MX-5
-  drawMiataGarageBay(ctx, state, time, hoveredMiata);
-
-  // 4. Prominent Unobstructed Monochrome Striped Roof Awning & Signboard
-  //    "KLASIK - GARDEN GARAGE CAFE ★"
-  const awningLeft = 152;
-  const awningTop = 36;
-  const awningWidth = 712;
-  const stripeCount = 16;
-  const stripeW = awningWidth / stripeCount;
-  for (let i = 0; i < stripeCount; i++) {
-    drawPixelBox(
-      ctx,
-      awningLeft + i * stripeW,
-      awningTop,
-      stripeW,
-      36,
-      i % 2 === 0 ? '#111318' : '#f8fafc',
-      '#090b0e'
-    );
-  }
-
-  // Grand Signboard Plaque Centered Across Top Awning
-  drawPixelBox(ctx, 228, 30, 556, 34, '#090b0e', '#f8fafc', '#334155');
-  ctx.font = 'bold 13px "Press Start 2P", monospace';
-  ctx.textAlign = 'center';
-  ctx.fillStyle = '#facc15';
-  ctx.fillText('KLASIK - GARDEN GARAGE CAFE ★', 506, 53);
-
-  // 5. Outdoor Garden Cafe Tables & Blooming White/Gold Daisy Planter Beds
-  drawOutdoorGardenTables(ctx, time);
-
-  state.daisies.forEach((patch) => {
-    drawDaisyBed(ctx, patch, time, hoveredDaisyId === patch.id);
-  });
-
-  // 6. 3D Front-Facing Monochrome Counter & Rear Appliance Bar inside the Cafe
-  const recommendedStation =
-    state.prep.processingStation === null ? getRecommendedStation(state) : null;
-
-  // Rear Appliance Counter with 3D Front Panel
-  drawPixelBox(ctx, 168, 114, 444, 48, '#0f172a', '#090b0e', '#334155');
-  drawPixelBox(ctx, 168, 162, 444, 16, '#1e293b', '#090b0e');
-
-  // Front Serving Bar with 3D Monochrome Ribbed Front Panel
-  drawPixelBox(ctx, 180, 224, 300, 32, '#0f172a', '#090b0e', '#475569');
-  drawPixelBox(ctx, 180, 256, 300, 18, '#334155', '#090b0e');
-  ctx.fillStyle = '#090b0e';
-  for (let rx = 192; rx < 472; rx += 16) {
-    ctx.fillRect(rx, 258, 4, 14);
-  }
-
-  STATIONS.forEach((station) => {
-    const isHovered = hoveredStationId === station.id;
-    const isRecommendedNext = recommendedStation === station.id;
-    drawStation(ctx, station, state, time, isHovered, isRecommendedNext);
-  });
-
-  // 7. Depth-Sorted Chibi Characters & Roaming Cats (Lilo & Champy)
+  // 2. Depth-Sorted Chibi Characters & Roaming Cats in the Current Room
   const actors: Array<{ y: number; draw: () => void }> = [
     {
       y: state.barista.y,
       draw: () => drawBarista(ctx, state, time),
     },
-    ...state.cats.map((cat) => ({
-      y: cat.y,
-      draw: () => drawCatCompanion(ctx, cat, time),
-    })),
-    ...state.customers.map((c) => ({
-      y: c.y,
-      draw: () => drawCustomer(ctx, c, state, time),
-    })),
+    ...state.cats
+      .filter((cat) => cat.room === state.room)
+      .map((cat) => ({
+        y: cat.y,
+        draw: () => drawCatCompanion(ctx, cat, time),
+      })),
+    ...state.customers
+      .filter((c) => c.room === state.room)
+      .map((c) => ({
+        y: c.y,
+        draw: () => drawCustomer(ctx, c, state, time),
+      })),
   ];
   actors.sort((a, b) => a.y - b.y);
   actors.forEach((a) => a.draw());
 
-  // 8. Pooled Particles (Hearts, Musical Notes, Water Droplets, Sparkles, Pollen)
+  // 3. Pooled Particles (Hearts, Notes, Water Droplets, Sparkles, Breeze Petals, Rain & Ripples)
   for (let i = 0; i < particles.items.length; i++) {
     const p = particles.items[i];
     if (!p.active) continue;
+
+    // Rain, ripples, and breeze petals only render full-screen in the outdoor GARDEN room
+    if (
+      state.room === 'inside' &&
+      (p.kind === 'rain' || p.kind === 'ripple' || p.kind === 'petal')
+    ) {
+      continue;
+    }
+
     const alpha = Math.max(0, Math.min(1, p.life / p.maxLife));
     ctx.globalAlpha = alpha;
     if (p.kind === 'heart') {
@@ -1405,6 +1677,20 @@ export function renderCafeWorld(
       ctx.font = 'bold 10px "Press Start 2P", monospace';
       ctx.fillStyle = p.color;
       ctx.fillText('♪', px(p.x), px(p.y));
+    } else if (p.kind === 'rain') {
+      ctx.fillStyle = p.color;
+      ctx.fillRect(px(p.x), px(p.y), 2, 10);
+      ctx.fillRect(px(p.x) - 2, px(p.y) + 6, 2, 6);
+    } else if (p.kind === 'ripple') {
+      const rSize = Math.round((1 - alpha) * 14) + 4;
+      ctx.strokeStyle = p.color;
+      ctx.lineWidth = 2;
+      ctx.strokeRect(px(p.x - rSize / 2), px(p.y - rSize / 4), rSize, Math.max(2, rSize / 2));
+    } else if (p.kind === 'petal') {
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(px(p.x), px(p.y), 6, 4);
+      ctx.fillStyle = '#facc15';
+      ctx.fillRect(px(p.x) + 2, px(p.y) + 2, 2, 2);
     } else {
       ctx.fillStyle = p.color;
       ctx.fillRect(px(p.x), px(p.y), px(p.size), px(p.size));
@@ -1412,9 +1698,13 @@ export function renderCafeWorld(
   }
   ctx.globalAlpha = 1;
 
-  // 9. Floating World Text Popups (`+💧 COZY! +2c`, `♥ LILO ♪`, etc.)
+  // 4. Day / Sunset / Night Ambient Lighting & Lamp/Headlight Glow Halos
+  renderAmbientLighting(ctx, state, time);
+
+  // 5. Floating World Text Popups in the Active Room
   for (let i = 0; i < state.popups.length; i++) {
     const pop = state.popups[i];
+    if (pop.room !== state.room) continue;
     const alpha = Math.max(0, Math.min(1, pop.life / pop.maxLife));
     ctx.globalAlpha = alpha;
     ctx.font = 'bold 9px "Press Start 2P", monospace';
