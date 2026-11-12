@@ -1,0 +1,6 @@
+{
+  "name": "Klasik — Cozy Garden Cafe",
+  "description": "A cozy, stress-free top-down 2D pixel-art garden coffee shop management game inspired by peaceful Gameboy Advance towns.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
