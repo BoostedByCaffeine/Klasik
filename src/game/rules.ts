@@ -7,6 +7,7 @@ export type DrinkId =
 export type RoomId = 'inside' | 'garden';
 export type TimeOfDay = 'day' | 'sunset' | 'night';
 export type WeatherType = 'clear' | 'breeze' | 'rain';
+export type MiataPaintColor = 'red' | 'white' | 'black';
 
 export interface DrinkRecipe {
   id: DrinkId;
@@ -65,9 +66,10 @@ export interface DaisyPatch {
 
 export type CatBehaviorState =
   | 'walking'
-  | 'sitting_grooming'
-  | 'pouncing'
   | 'napping'
+  | 'sitting_grooming'
+  | 'stretching'
+  | 'yarn_play'
   | 'purring';
 
 export interface CatCompanion {
@@ -97,6 +99,7 @@ export interface CustomerEntity {
   order: DrinkId;
   room: RoomId;
   state: 'walking_in' | 'waiting' | 'sipping' | 'walking_out';
+  queueSlot: number; // 0 = front counter, 1 = second in queue
   x: number;
   y: number;
   targetX: number;
@@ -106,6 +109,50 @@ export interface CustomerEntity {
   heartsGiven: number;
   dialogueText: string;
   arrivalTime: number;
+  walkDist: number;
+}
+
+export interface DatingCouple {
+  id: string;
+  room: RoomId;
+  tableX: number;
+  tableY: number;
+  partnerAName: string;
+  partnerBName: string;
+  variantA: number;
+  variantB: number;
+  quote: string;
+  heartPhase: number;
+}
+
+export interface PhotoSquadMember {
+  name: string;
+  x: number;
+  y: number;
+  variant: number;
+  posePhase: number;
+}
+
+export interface PhotoSquadState {
+  members: PhotoSquadMember[];
+  flashTimer: number;
+  flashAlpha: number;
+  quote: string;
+}
+
+export interface StaffWorker {
+  id: 'miko' | 'ken';
+  name: 'Miko' | 'Ken';
+  role: 'auto_barista' | 'auto_server';
+  cost: number;
+  hired: boolean;
+  room: RoomId;
+  x: number;
+  y: number;
+  targetX: number;
+  targetY: number;
+  actionTimer: number;
+  statusText: string;
   walkDist: number;
 }
 
@@ -125,23 +172,31 @@ export interface CafeState {
   mode: 'title' | 'playing' | 'paused' | 'gameover';
   room: RoomId;
   timeOfDay: TimeOfDay;
+  timeManualOverride: boolean;
   timeCycleTimer: number;
   weather: WeatherType;
   weatherCycleTimer: number;
   dayNumber: number;
   servedCount: number;
   dailyTarget: number;
+  shiftGoalReachedShown: boolean;
+  shiftSuccessBannerVisible: boolean;
   coins: number;
+  tipJarCoins: number;
   hearts: number;
   cozyRating: number; // 0..100
   bestCozyRating: number;
   elapsedSeconds: number;
   miataHeadlightsOn: boolean;
+  miataColor: MiataPaintColor;
   catPetBonus: number;
   prep: PrepSlotState;
   daisies: DaisyPatch[];
   cats: CatCompanion[];
   customers: CustomerEntity[];
+  couples: DatingCouple[];
+  photoSquad: PhotoSquadState;
+  staff: StaffWorker[];
   popups: FloatingTextPopup[];
   barista: {
     x: number;
@@ -187,9 +242,9 @@ export const RECIPES: Record<DrinkId, DrinkRecipe> = {
     price: 18,
     steps: ['grinder', 'espresso', 'cup_counter'],
     stepLabels: ['1. Grind Dark Roast [1]', '2. Pull Double Shot [2]', '3. Dark Mocha Cup [Space]'],
-    color: '#3f2318',
-    accentColor: '#f43f5e',
-    description: 'High-revving double espresso blended with dark garage cocoa.',
+    color: '#dc2626',
+    accentColor: '#fef08a',
+    description: 'High-revving double espresso blended with Classic Red garage cocoa.',
   },
   catnip_herbal_tea: {
     id: 'catnip_herbal_tea',
@@ -213,7 +268,7 @@ export const STATIONS: StationConfig[] = [
     y: 138,
     width: 64,
     height: 46,
-    processDuration: 0.6,
+    processDuration: 0.45,
     hotkey: '1',
   },
   {
@@ -224,7 +279,7 @@ export const STATIONS: StationConfig[] = [
     y: 138,
     width: 68,
     height: 46,
-    processDuration: 0.6,
+    processDuration: 0.45,
     hotkey: '2',
   },
   {
@@ -235,7 +290,7 @@ export const STATIONS: StationConfig[] = [
     y: 138,
     width: 64,
     height: 46,
-    processDuration: 0.6,
+    processDuration: 0.45,
     hotkey: '3',
   },
   {
@@ -246,7 +301,7 @@ export const STATIONS: StationConfig[] = [
     y: 138,
     width: 64,
     height: 46,
-    processDuration: 0.6,
+    processDuration: 0.45,
     hotkey: '4',
   },
   {
@@ -257,7 +312,7 @@ export const STATIONS: StationConfig[] = [
     y: 138,
     width: 64,
     height: 46,
-    processDuration: 0.6,
+    processDuration: 0.45,
     hotkey: '5',
   },
   {
@@ -313,13 +368,13 @@ export const INITIAL_CATS: CatCompanion[] = [
     coatColor: 'white',
     eyeColor: '#38bdf8', // Bright Blue Eyes
     collarColor: '#2563eb', // Blue Collar
-    x: 748,
-    y: 274, // Napping on the 1990 Miata MX-5 hood inside the Garage Showroom!
-    targetX: 748,
-    targetY: 274,
-    nextStateAfterWalk: 'napping',
-    state: 'napping',
-    stateTimer: 5.5,
+    x: 496,
+    y: 246, // Playing with yarn / lounging on the Indoor Cafe Rug!
+    targetX: 496,
+    targetY: 246,
+    nextStateAfterWalk: 'yarn_play',
+    state: 'yarn_play',
+    stateTimer: 4.5,
     tailPhase: 0,
     heartTimer: 0,
     hopPhase: 0,
@@ -332,12 +387,12 @@ export const INITIAL_CATS: CatCompanion[] = [
     coatColor: 'black',
     eyeColor: '#22c55e', // Bright Green Eyes
     collarColor: '#14b8a6', // Bluish-Green Collar
-    x: 310,
-    y: 332,
-    targetX: 356,
-    targetY: 344,
-    nextStateAfterWalk: 'sitting_grooming',
-    state: 'walking',
+    x: 342,
+    y: 326,
+    targetX: 342,
+    targetY: 326,
+    nextStateAfterWalk: 'stretching',
+    state: 'stretching',
     stateTimer: 4.0,
     tailPhase: 1.5,
     heartTimer: 0,
@@ -349,8 +404,14 @@ export const INITIAL_CATS: CatCompanion[] = [
 // 3 Indoor Seating Lounge Tables (INSIDE map)
 export const INDOOR_TABLES = [
   { x: 132, y: 358 },
-  { x: 264, y: 382 },
-  { x: 492, y: 358 },
+  { x: 244, y: 392 },
+  { x: 504, y: 368 },
+];
+
+// 2 Garage Showroom Lounge Tables right next to the 1990 Miata MX-5 (INSIDE map)
+export const GARAGE_TABLES = [
+  { x: 648, y: 166 },
+  { x: 648, y: 332 },
 ];
 
 // 4 Outdoor Umbrella Lounge Tables (GARDEN map)
@@ -361,12 +422,34 @@ export const GARDEN_TABLES = [
   { x: 632, y: 352 },
 ];
 
-// 1990 Mazda Miata MX-5 (NA) in the Right-Wing Garage Showroom (INSIDE map)
+// 2-Customer Active Front Counter Queue Slots (INSIDE map)
+export const COUNTER_QUEUE_SLOTS = [
+  { x: 324, y: 308 },
+  { x: 422, y: 322 },
+];
+
+// Clickable Counter Tip Jar on the Front Counter (INSIDE map)
+export const TIP_JAR_BOUNDS = {
+  x: 288,
+  y: 228,
+  width: 34,
+  height: 32,
+};
+
+// Clickable Red Mechanic Tool Chest in the Garage Showroom (cycles Miata paint color!)
+export const TOOL_CHEST_BOUNDS = {
+  x: 652,
+  y: 53,
+  width: 92,
+  height: 38,
+};
+
+// Classic Red 1990 Mazda Miata MX-5 (NA) in the Right-Wing Garage Showroom (INSIDE map)
 export const MIATA_GARAGE_BOUNDS = {
-  x: 748,
-  y: 248,
-  width: 118,
-  height: 180,
+  x: 786,
+  y: 228,
+  width: 112,
+  height: 172,
 };
 
 // Doorway mats for switching between INSIDE and GARDEN maps
@@ -374,7 +457,139 @@ export const INSIDE_DOOR_MAT = { x: 356, y: 446, width: 120, height: 34 };
 export const GARDEN_DOOR_MAT = { x: 450, y: 102, width: 120, height: 34 };
 export const GARDEN_ORDER_WINDOW = { x: 260, y: 82, width: 156, height: 48 };
 
-export const NPC_NAMES = ['Flora', 'Milo', 'Takumi', 'Clara', 'Keisuke', 'Hazel', 'Suki', 'Oliver'];
+export const NPC_NAMES = ['Flora', 'Takumi', 'Milo', 'Clara', 'Keisuke', 'Hazel', 'Suki', 'Oliver'];
+
+export const INITIAL_COUPLES: DatingCouple[] = [
+  {
+    id: 'couple-cafe',
+    room: 'inside',
+    tableX: 132,
+    tableY: 358,
+    partnerAName: 'Milo',
+    partnerBName: 'Clara',
+    variantA: 1,
+    variantB: 3,
+    quote: 'Best mocha date ♥',
+    heartPhase: 0.4,
+  },
+  {
+    id: 'couple-garage',
+    room: 'inside',
+    tableX: 648,
+    tableY: 166,
+    partnerAName: 'Keisuke',
+    partnerBName: 'Suki',
+    variantA: 2,
+    variantB: 0,
+    quote: 'Classic Red NA ♥',
+    heartPhase: 1.8,
+  },
+  {
+    id: 'couple-garden-1',
+    room: 'garden',
+    tableX: 268,
+    tableY: 214,
+    partnerAName: 'Oliver',
+    partnerBName: 'Hazel',
+    variantA: 1,
+    variantB: 2,
+    quote: 'Daisies & latte~ ♥',
+    heartPhase: 0.9,
+  },
+  {
+    id: 'couple-garden-2',
+    room: 'garden',
+    tableX: 632,
+    tableY: 352,
+    partnerAName: 'Leo',
+    partnerBName: 'Maya',
+    variantA: 3,
+    variantB: 0,
+    quote: 'Garden romance ♥',
+    heartPhase: 2.5,
+  },
+];
+
+export const INITIAL_STAFF: StaffWorker[] = [
+  {
+    id: 'miko',
+    name: 'Miko',
+    role: 'auto_barista',
+    cost: 35,
+    hired: false,
+    room: 'inside',
+    x: 190,
+    y: 182,
+    targetX: 190,
+    targetY: 182,
+    actionTimer: 1.1,
+    statusText: 'Auto-Brewing',
+    walkDist: 0,
+  },
+  {
+    id: 'ken',
+    name: 'Ken',
+    role: 'auto_server',
+    cost: 50,
+    hired: false,
+    room: 'inside',
+    x: 410,
+    y: 196,
+    targetX: 410,
+    targetY: 196,
+    actionTimer: 1.3,
+    statusText: 'Auto-Serve & Water',
+    walkDist: 0,
+  },
+];
+
+/**
+ * Maps local real-world hour (0..23) to TimeOfDay:
+ * - Day: 6am–5pm (`hour >= 6 && hour < 17`)
+ * - Sunset: 5pm–7pm (`hour >= 17 && hour < 19`)
+ * - Night: 7pm–6am (`hour >= 19 || hour < 6`)
+ */
+export function getTimeOfDayFromHour(hour: number): TimeOfDay {
+  if (hour >= 6 && hour < 17) return 'day';
+  if (hour >= 17 && hour < 19) return 'sunset';
+  return 'night';
+}
+
+export function formatRealClock(date: Date = new Date()): string {
+  let hours = date.getHours();
+  const minutes = date.getMinutes();
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  hours = hours % 12;
+  if (hours === 0) hours = 12;
+  const minStr = minutes < 10 ? `0${minutes}` : `${minutes}`;
+  return `${hours}:${minStr} ${ampm}`;
+}
+
+/**
+ * Converts pointer clientX/clientY into 100% pixel-accurate 900x480 world coordinates,
+ * accounting for `object-fit: contain` letterbox/pillarbox margins on mobile & desktop!
+ */
+export function screenToWorldContain(
+  clientX: number,
+  clientY: number,
+  rect: { left: number; top: number; width: number; height: number },
+  worldW = 900,
+  worldH = 480
+): { x: number; y: number } {
+  if (rect.width <= 0 || rect.height <= 0) return { x: 0, y: 0 };
+  const scale = Math.min(rect.width / worldW, rect.height / worldH);
+  const renderedW = worldW * scale;
+  const renderedH = worldH * scale;
+  const offsetX = (rect.width - renderedW) / 2;
+  const offsetY = (rect.height - renderedH) / 2;
+
+  const localX = clientX - rect.left - offsetX;
+  const localY = clientY - rect.top - offsetY;
+
+  const worldX = Math.max(0, Math.min(worldW, (localX / renderedW) * worldW));
+  const worldY = Math.max(0, Math.min(worldH, (localY / renderedH) * worldH));
+  return { x: worldX, y: worldY };
+}
 
 export function spawnPopup(
   state: CafeState,
@@ -395,7 +610,7 @@ export function spawnPopup(
     maxLife: 1.35,
     color,
   });
-  if (state.popups.length > 18) {
+  if (state.popups.length > 22) {
     state.popups.shift();
   }
 }
@@ -403,17 +618,22 @@ export function spawnPopup(
 export function createInitialCafeState(autostart = false): CafeState {
   const daisies = INITIAL_DAISIES.map((d) => ({ ...d }));
   const cats = INITIAL_CATS.map((c) => ({ ...c }));
-  const initialCustomer: CustomerEntity = {
+  const couples = INITIAL_COUPLES.map((c) => ({ ...c }));
+  const staff = INITIAL_STAFF.map((s) => ({ ...s }));
+
+  // 2 Simultaneous Waiting Customers in the Active Counter Queue!
+  const customer1: CustomerEntity = {
     id: 'cust-1',
     name: 'Flora',
     spriteVariant: 0,
     order: 'miata_mocha',
     room: 'inside',
     state: 'waiting',
-    x: 356,
-    y: 312,
-    targetX: 356,
-    targetY: 312,
+    queueSlot: 0,
+    x: COUNTER_QUEUE_SLOTS[0].x,
+    y: COUNTER_QUEUE_SLOTS[0].y,
+    targetX: COUNTER_QUEUE_SLOTS[0].x,
+    targetY: COUNTER_QUEUE_SLOTS[0].y,
     seatIndex: null,
     sipTimer: 0,
     heartsGiven: 0,
@@ -422,22 +642,49 @@ export function createInitialCafeState(autostart = false): CafeState {
     walkDist: 0,
   };
 
+  const customer2: CustomerEntity = {
+    id: 'cust-2',
+    name: 'Takumi',
+    spriteVariant: 2,
+    order: 'daisy_vanilla_latte',
+    room: 'inside',
+    state: 'waiting',
+    queueSlot: 1,
+    x: COUNTER_QUEUE_SLOTS[1].x,
+    y: COUNTER_QUEUE_SLOTS[1].y,
+    targetX: COUNTER_QUEUE_SLOTS[1].x,
+    targetY: COUNTER_QUEUE_SLOTS[1].y,
+    seatIndex: null,
+    sipTimer: 0,
+    heartsGiven: 0,
+    dialogueText: 'Daisy Latte next, please!',
+    arrivalTime: 0.5,
+    walkDist: 0,
+  };
+
+  const initialTime = getTimeOfDayFromHour(new Date().getHours());
+
   return {
     mode: autostart ? 'playing' : 'title',
     room: 'inside',
-    timeOfDay: 'day',
+    timeOfDay: initialTime,
+    timeManualOverride: false,
     timeCycleTimer: 45,
     weather: 'clear',
     weatherCycleTimer: 40,
     dayNumber: 1,
     servedCount: 0,
     dailyTarget: 6,
-    coins: 25,
+    shiftGoalReachedShown: false,
+    shiftSuccessBannerVisible: false,
+    coins: 35,
+    tipJarCoins: 6,
     hearts: 3,
     cozyRating: calculateCozyRating(daisies, 3, 0, 'clear'),
     bestCozyRating: 85,
     elapsedSeconds: 0,
     miataHeadlightsOn: true,
+    miataColor: 'red',
     catPetBonus: 0,
     prep: {
       activeDrink: null,
@@ -450,7 +697,19 @@ export function createInitialCafeState(autostart = false): CafeState {
     },
     daisies,
     cats,
-    customers: [initialCustomer],
+    customers: [customer1, customer2],
+    couples,
+    photoSquad: {
+      members: [
+        { name: 'Ren', x: 726, y: 368, variant: 1, posePhase: 0 },
+        { name: 'Yuki', x: 786, y: 392, variant: 3, posePhase: 1.2 },
+        { name: 'Sora', x: 842, y: 368, variant: 2, posePhase: 2.4 },
+      ],
+      flashTimer: 4.5,
+      flashAlpha: 0,
+      quote: '📸 Red NA Miata!',
+    },
+    staff,
     popups: [],
     barista: {
       x: 296,
@@ -464,7 +723,7 @@ export function createInitialCafeState(autostart = false): CafeState {
       speedBoostTimer: 0,
     },
     lastMessage:
-      "Flora ordered a '90s Miata Mocha! Tap ⚡ Smart Step or [1] Grinder → [2] Espresso → [Space] Cup.",
+      "Flora & Takumi are in line! Tap ⚡ BREW / SERVE or any appliance to craft Flora's '90s Miata Mocha.",
   };
 }
 
@@ -484,13 +743,26 @@ export function calculateCozyRating(
 }
 
 /**
- * Returns the exact next StationId required for the active drink or waiting customer's order.
+ * Returns the front-most waiting customer in the counter queue (queueSlot 0 first).
+ */
+export function getFrontWaitingCustomer(state: CafeState): CustomerEntity | null {
+  const waiting = state.customers
+    .filter((c) => c.state === 'waiting' || c.state === 'walking_in')
+    .sort((a, b) => a.queueSlot - b.queueSlot);
+  if (waiting[0] && waiting[0].state === 'walking_in') {
+    waiting[0].state = 'waiting';
+  }
+  return waiting[0] ?? null;
+}
+
+/**
+ * Returns the exact next StationId required for the active drink or front waiting customer's order.
  */
 export function getRecommendedStation(state: CafeState): StationId | null {
   const prep = state.prep;
   if (prep.currentStepIndex >= 3) return null;
 
-  const waitingCustomer = state.customers.find((c) => c.state === 'waiting');
+  const waitingCustomer = getFrontWaitingCustomer(state);
   const targetDrinkId: DrinkId | null =
     prep.activeDrink ?? (waitingCustomer ? waitingCustomer.order : 'miata_mocha');
 
@@ -515,7 +787,7 @@ export function toggleRoom(state: CafeState, targetRoom?: RoomId): RoomId {
       state.barista.targetY = 176;
       state.barista.facing = 'down';
       state.lastMessage =
-        'Stepped out to the Backyard Daisy Garden! Click any planter or the Watering Well [W].';
+        'Stepped out to the Backyard Daisy Garden! Click any planter or [💧 WATER] to hydrate.';
     } else {
       state.barista.x = 356;
       state.barista.y = 390;
@@ -523,24 +795,25 @@ export function toggleRoom(state: CafeState, targetRoom?: RoomId): RoomId {
       state.barista.targetY = 192;
       state.barista.facing = 'up';
       state.lastMessage =
-        'Entered the Monochrome Coffee Shop & 1990 Miata Garage Showroom!';
+        'Entered the Monochrome Coffee Shop & Classic Red 1990 Miata Showroom!';
     }
   }
   return state.room;
 }
 
 /**
- * Cycles Time of Day (`day` -> `sunset` -> `night`) via `[T]` or UI button.
+ * Manually cycles Time of Day (`day` -> `sunset` -> `night`) via `[T]` or UI button.
  */
 export function cycleTimeOfDay(state: CafeState): TimeOfDay {
   const order: TimeOfDay[] = ['day', 'sunset', 'night'];
   const next = order[(order.indexOf(state.timeOfDay) + 1) % order.length];
   state.timeOfDay = next;
-  state.timeCycleTimer = 45;
+  state.timeManualOverride = true;
+  state.timeCycleTimer = 60;
   const labels: Record<TimeOfDay, string> = {
-    day: '☀️ DAYTIME: Bright morning sun illuminates the Cafe & Daisy Garden.',
-    sunset: '🌅 SUNSET: Golden-hour glow warms the pendant lamps & Miata showroom!',
-    night: '🌙 NIGHT: Cozy midnight vibes — string lanterns, headlights & fireflies glow!',
+    day: '☀️ DAYTIME (Manual): Bright morning sun illuminates the Cafe & Daisy Garden.',
+    sunset: '🌅 SUNSET (Manual): Smooth radial golden-hour glow warms the Miata showroom!',
+    night: '🌙 NIGHT (Manual): Cozy midnight vibes — radial lantern glows, headlights & fireflies!',
   };
   state.lastMessage = labels[next];
   return next;
@@ -567,17 +840,122 @@ export function cycleWeather(state: CafeState): WeatherType {
 }
 
 /**
- * Updates Daisy bed hydration & auto-cycles time/weather over time.
- * When `weather === 'rain'`, all 6 daisy beds regenerate `+4% per second`!
+ * Cycles the 1990 Mazda Miata MX-5 custom paint job when clicking the Garage Tool Chest.
+ */
+export function cycleMiataPaintColor(state: CafeState): MiataPaintColor {
+  state.room = 'inside';
+  const order: MiataPaintColor[] = ['red', 'white', 'black'];
+  const next = order[(order.indexOf(state.miataColor) + 1) % order.length];
+  state.miataColor = next;
+  const labelMap: Record<MiataPaintColor, string> = {
+    red: 'PAINT: CLASSIC RED ★',
+    white: 'PAINT: CRYSTAL WHITE',
+    black: 'PAINT: MONO BLACK',
+  };
+  spawnPopup(
+    state,
+    labelMap[next],
+    MIATA_GARAGE_BOUNDS.x,
+    MIATA_GARAGE_BOUNDS.y - 48,
+    '#facc15',
+    'inside'
+  );
+  state.lastMessage = `Custom respray at the Tool Chest! 1990 Miata MX-5 is now ${labelMap[next].replace('PAINT: ', '')}.`;
+  return next;
+}
+
+/**
+ * Collects accumulated coins from the clickable Counter Tip Jar.
+ */
+export function collectTipJar(state: CafeState): number {
+  if (state.tipJarCoins <= 0) {
+    state.lastMessage = 'Tip Jar is empty right now — serve drinks to fill it up!';
+    return 0;
+  }
+  const amount = state.tipJarCoins;
+  state.coins += amount;
+  state.tipJarCoins = 0;
+  spawnPopup(state, `+${amount}c 💰 TIPS!`, TIP_JAR_BOUNDS.x, TIP_JAR_BOUNDS.y - 22, '#facc15', 'inside');
+  state.lastMessage = `Collected +${amount} Coins from the Counter Tip Jar!`;
+  return amount;
+}
+
+/**
+ * Triggers a camera flash from the Miata Photo Squad in the Garage Showroom.
+ */
+export function triggerPhotoSquadFlash(state: CafeState): number {
+  state.photoSquad.flashAlpha = 1.0;
+  state.photoSquad.flashTimer = 6.5;
+  const quotes = ['📸 FLASH! So clean!', '📸 Pop-ups! ♥', '📸 JDM Legend! ★', '📸 Red NA Miata!'];
+  state.photoSquad.quote = quotes[Math.floor(state.elapsedSeconds) % quotes.length];
+  const bonus = 4;
+  state.coins += bonus;
+  spawnPopup(
+    state,
+    `📸 FLASH! +${bonus}c`,
+    MIATA_GARAGE_BOUNDS.x,
+    MIATA_GARAGE_BOUNDS.y + 82,
+    '#fef08a',
+    'inside'
+  );
+  return bonus;
+}
+
+/**
+ * Hires the next available Cafe Worker (`miko` for $35, then `ken` for $50).
+ */
+export function hireNextStaff(state: CafeState): {
+  hired: boolean;
+  worker?: StaffWorker;
+  message: string;
+} {
+  const nextWorker = state.staff.find((s) => !s.hired);
+  if (!nextWorker) {
+    state.lastMessage = 'Both Cafe Workers (Miko & Ken) are already hired and working hard!';
+    return { hired: false, message: state.lastMessage };
+  }
+
+  if (state.coins < nextWorker.cost) {
+    state.lastMessage = `Need $${nextWorker.cost} to hire ${nextWorker.name} (${
+      nextWorker.id === 'miko' ? 'Auto-Barista' : 'Auto-Server & Gardener'
+    })! You have $${state.coins}.`;
+    return { hired: false, message: state.lastMessage };
+  }
+
+  state.coins -= nextWorker.cost;
+  nextWorker.hired = true;
+  nextWorker.actionTimer = 0.6;
+
+  spawnPopup(
+    state,
+    `👩‍🍳 HIRED ${nextWorker.name.toUpperCase()}!`,
+    nextWorker.x,
+    nextWorker.y - 28,
+    '#4ade80',
+    'inside'
+  );
+
+  state.lastMessage =
+    nextWorker.id === 'miko'
+      ? 'Hired Miko (Auto-Barista)! She automatically brews Steps 1, 2 & 3 behind the bar!'
+      : 'Hired Ken (Auto-Server & Gardener)! He automatically serves drinks & waters daisies!';
+
+  return { hired: true, worker: nextWorker, message: state.lastMessage };
+}
+
+/**
+ * Updates Daisy bed hydration, real-time clock sync, Miata photo squad flashes, and hired staff AI.
  */
 export function advanceEnvironmentAndHydration(state: CafeState, dt: number): boolean {
   let hudChanged = false;
 
-  // Auto-progress Time of Day every 45s
-  state.timeCycleTimer -= dt;
-  if (state.timeCycleTimer <= 0) {
-    cycleTimeOfDay(state);
-    hudChanged = true;
+  // Sync Time of Day with real local clock unless manually overridden
+  if (!state.timeManualOverride) {
+    const syncedTime = getTimeOfDayFromHour(new Date().getHours());
+    if (syncedTime !== state.timeOfDay) {
+      state.timeOfDay = syncedTime;
+      hudChanged = true;
+    }
   }
 
   // Auto-progress Weather every 40s
@@ -587,13 +965,84 @@ export function advanceEnvironmentAndHydration(state: CafeState, dt: number): bo
     hudChanged = true;
   }
 
+  // Update Dating Couples floating heart phase
+  state.couples.forEach((couple) => {
+    couple.heartPhase += dt * 2.2;
+  });
+
+  // Update Miata Photo Squad camera flashes
+  if (state.photoSquad.flashAlpha > 0) {
+    state.photoSquad.flashAlpha = Math.max(0, state.photoSquad.flashAlpha - dt * 2.4);
+  }
+  state.photoSquad.members.forEach((m) => {
+    m.posePhase += dt * 3.0;
+  });
+  state.photoSquad.flashTimer -= dt;
+  if (state.photoSquad.flashTimer <= 0) {
+    triggerPhotoSquadFlash(state);
+    hudChanged = true;
+  }
+
+  // Update Hired Staff AI (Miko Auto-Barista & Ken Auto-Server/Gardener)
+  state.staff.forEach((worker) => {
+    if (!worker.hired) return;
+
+    const dx = worker.targetX - worker.x;
+    const dy = worker.targetY - worker.y;
+    const dist = Math.hypot(dx, dy);
+    if (dist > 2) {
+      const step = Math.min(dist, 145 * dt);
+      worker.x += (dx / dist) * step;
+      worker.y += (dy / dist) * step;
+      worker.walkDist += step;
+    }
+
+    worker.actionTimer -= dt;
+    if (worker.actionTimer <= 0) {
+      if (worker.id === 'miko') {
+        // Miko automatically brews Steps 1, 2, and 3 for waiting customers
+        worker.actionTimer = 1.05;
+        const frontCust = getFrontWaitingCustomer(state);
+        if (frontCust && state.prep.currentStepIndex < 3 && state.prep.processingStation === null) {
+          const nextSt = getRecommendedStation(state);
+          if (nextSt) {
+            const stObj = STATIONS.find((s) => s.id === nextSt);
+            if (stObj) {
+              worker.targetX = stObj.x;
+              worker.targetY = 176;
+            }
+            interactWithStation(state, nextSt, true);
+            hudChanged = true;
+          }
+        }
+      } else if (worker.id === 'ken') {
+        // Ken automatically serves finished drinks at Step 3 AND waters thirsty daisies!
+        worker.actionTimer = 1.25;
+        if (state.prep.currentStepIndex === 3 && state.prep.activeDrink) {
+          worker.targetX = 356;
+          worker.targetY = 202;
+          const res = serveWaitingCustomer(state, true);
+          if (res.served) {
+            hudChanged = true;
+          }
+        } else {
+          const thirsty = state.daisies.find((d) => d.needsWater);
+          if (thirsty) {
+            waterDaisyPatch(state, thirsty.id, true);
+            hudChanged = true;
+          }
+        }
+      }
+    }
+  });
+
   const prevCozy = state.cozyRating;
   state.daisies.forEach((patch, idx) => {
     if (state.weather === 'rain') {
       // Rain automatically hydrates all 6 Daisy beds at +4% per second!
       patch.hydration = Math.min(100, patch.hydration + 4.0 * dt);
     } else {
-      const decayRate = 1.15 + (idx % 3) * 0.1;
+      const decayRate = 1.05 + (idx % 3) * 0.1;
       patch.hydration = Math.max(15, patch.hydration - decayRate * dt);
     }
     const nowThirsty = patch.hydration <= 55;
@@ -628,53 +1077,47 @@ export interface StationInteractionResult {
     | 'clear_tray'
     | 'drink_ready';
   message: string;
+  stationId?: StationId;
 }
 
+/**
+ * Smooth, non-dropping station interaction:
+ * - If a step is currently in progress, clicking ANY station immediately completes the in-progress step
+ *   AND starts the next step in the same click without dropping inputs!
+ * - If the player taps any brewing appliance while a customer is waiting, automatically aligns with
+ *   the customer's next recipe step so mobile touch input never feels clunky or rejected.
+ */
 export function interactWithStation(
   state: CafeState,
-  stationId: StationId
+  stationId: StationId,
+  fromAutoStaff = false
 ): StationInteractionResult {
   const prep = state.prep;
 
   if (stationId === 'watering_can') {
-    state.room = 'garden';
-    prep.holdingWateringCan = !prep.holdingWateringCan;
-    if (prep.holdingWateringCan) {
-      prep.waterCharges = 3;
-      state.lastMessage =
-        'Filled Watering Can at the Garden Well! Click any daisy bed or press [W].';
-    } else {
-      state.lastMessage = 'Returned Watering Can to the Garden Well.';
-    }
+    waterAllThirstyDaisies(state);
     return { handled: true, actionType: 'equip_can', message: state.lastMessage };
   }
 
-  // Smart Auto-Switch QoL: Pressing any brewing station automatically switches to INSIDE map!
-  if (state.room !== 'inside') {
+  // Smart Auto-Switch QoL: Pressing any brewing station automatically switches to INSIDE map (unless triggered by background AI)
+  if (!fromAutoStaff && state.room !== 'inside') {
     state.room = 'inside';
     state.barista.x = 296;
     state.barista.y = 205;
   }
 
-  // Auto-complete any active step if the player clicks the next station or taps rapidly
+  // If a step is currently processing, smoothly complete it right now AND continue to start the next step!
   if (prep.processingStation !== null && prep.processTimer > 0) {
-    if (stationId === prep.processingStation) {
-      if (prep.processTimer <= prep.processDuration * 0.65) {
-        prep.processingStation = null;
-        prep.processTimer = 0;
-        prep.currentStepIndex = Math.min(3, prep.currentStepIndex + 1);
-        state.lastMessage = `Step ${prep.currentStepIndex}/3 finished!`;
-        return {
-          handled: true,
-          actionType: prep.currentStepIndex === 3 ? 'drink_ready' : 'start_step',
-          message: state.lastMessage,
-        };
-      }
-      return {
-        handled: false,
-        actionType: 'already_busy',
-        message: 'Brewing in progress — watch the progress bar above the appliance!',
-      };
+    const finishedSt = STATIONS.find((s) => s.id === prep.processingStation);
+    if (finishedSt) {
+      spawnPopup(
+        state,
+        `✓ ${finishedSt.shortLabel.toUpperCase()}`,
+        finishedSt.x,
+        finishedSt.y - 26,
+        '#4ade80',
+        'inside'
+      );
     }
     prep.processingStation = null;
     prep.processTimer = 0;
@@ -693,114 +1136,47 @@ export function interactWithStation(
 
   prep.holdingWateringCan = false;
 
-  const station = STATIONS.find((s) => s.id === stationId);
-  const speedMultiplier = state.barista.speedBoostTimer > 0 ? 0.72 : 1.0;
-  const duration = (station ? station.processDuration : 0.6) * speedMultiplier;
-  const waitingCustomer = state.customers.find((c) => c.state === 'waiting');
+  const waitingCustomer = getFrontWaitingCustomer(state);
 
-  // STEP 0 -> STEP 1
-  if (prep.currentStepIndex === 0) {
-    if (stationId === 'grinder') {
-      const custOrder = waitingCustomer?.order;
-      const initialCoffee: DrinkId =
-        custOrder && custOrder !== 'catnip_herbal_tea' ? custOrder : 'miata_mocha';
-      prep.activeDrink = initialCoffee;
-      prep.processingStation = 'grinder';
-      prep.processDuration = duration;
-      prep.processTimer = duration;
-      state.lastMessage =
-        initialCoffee === 'midnight_cold_brew'
-          ? 'Step 1/3: Extracting Midnight Cold Brew concentrate...'
-          : `Step 1/3: Grinding fresh beans for ${RECIPES[initialCoffee].shortName}...`;
-      return { handled: true, actionType: 'start_step', message: state.lastMessage };
-    }
-    if (stationId === 'kettle') {
-      prep.activeDrink = 'catnip_herbal_tea';
-      prep.processingStation = 'kettle';
-      prep.processDuration = duration;
-      prep.processTimer = duration;
-      state.lastMessage = 'Step 1/3: Boiling spring water in the matte-black kettle...';
-      return { handled: true, actionType: 'start_step', message: state.lastMessage };
-    }
-    const recStation = getRecommendedStation(state);
-    const recConfig = STATIONS.find((s) => s.id === recStation);
-    state.lastMessage = `Next up: Click ${recConfig?.shortLabel ?? 'Grinder'} [${recConfig?.hotkey ?? '1'}] (follow the ▼ NEXT arrow)!`;
-    return { handled: false, actionType: 'wrong_station', message: state.lastMessage };
-  }
-
-  // STEP 1 -> STEP 2
-  if (prep.currentStepIndex === 1) {
-    if (prep.activeDrink !== 'catnip_herbal_tea') {
-      if (stationId === 'espresso') {
-        const custOrder = waitingCustomer?.order;
-        prep.activeDrink =
-          custOrder === 'daisy_vanilla_latte' || custOrder === 'midnight_cold_brew'
-            ? custOrder
-            : 'miata_mocha';
-        prep.processingStation = 'espresso';
-        prep.processDuration = duration;
-        prep.processTimer = duration;
-        state.lastMessage = "Step 2/3: Pulling rich double shot for '90s Miata Mocha...";
-        return { handled: true, actionType: 'start_step', message: state.lastMessage };
-      }
-      if (stationId === 'milk_frother') {
-        const custOrder = waitingCustomer?.order;
-        prep.activeDrink =
-          custOrder === 'midnight_cold_brew'
-            ? 'midnight_cold_brew'
-            : custOrder === 'miata_mocha'
-              ? 'miata_mocha'
-              : 'daisy_vanilla_latte';
-        prep.processingStation = 'milk_frother';
-        prep.processDuration = duration;
-        prep.processTimer = duration;
-        state.lastMessage =
-          prep.activeDrink === 'midnight_cold_brew'
-            ? 'Step 2/3: Whipping silky Sweet Cream Cold Foam...'
-            : 'Step 2/3: Steaming velvety vanilla oat foam...';
-        return { handled: true, actionType: 'start_step', message: state.lastMessage };
-      }
-      state.lastMessage = 'Step 2/3: Click Espresso [2] or Frother [3] (highlighted with ▼ NEXT)!';
-      return { handled: false, actionType: 'wrong_station', message: state.lastMessage };
-    } else {
-      if (stationId === 'tea_leaves') {
-        prep.processingStation = 'tea_leaves';
-        prep.processDuration = duration;
-        prep.processTimer = duration;
-        state.lastMessage = 'Step 2/3: Steeping organic Catnip & Green Tea leaves...';
-        return { handled: true, actionType: 'start_step', message: state.lastMessage };
-      }
-      state.lastMessage = 'Step 2/3: Click Tea Leaves [5] (highlighted with ▼ NEXT)!';
-      return { handled: false, actionType: 'wrong_station', message: state.lastMessage };
-    }
-  }
-
-  // STEP 2 -> STEP 3 (Finish Cup on Pickup Bar)
-  if (prep.currentStepIndex === 2) {
-    if (stationId === 'cup_counter') {
-      prep.processingStation = 'cup_counter';
-      prep.processDuration = duration;
-      prep.processTimer = duration;
-      const recipe = prep.activeDrink ? RECIPES[prep.activeDrink] : null;
-      state.lastMessage = `Step 3/3: Pouring ${recipe?.name ?? 'drink'} at the Pickup Bar...`;
-      return { handled: true, actionType: 'start_step', message: state.lastMessage };
-    }
-    state.lastMessage = 'Step 3/3: Click Pour Cup [Space] on the Pickup Bar to finish!';
-    return { handled: false, actionType: 'wrong_station', message: state.lastMessage };
-  }
-
+  // If drink is already at Step 3, report drink_ready
   if (prep.currentStepIndex === 3 && prep.activeDrink) {
     return {
       handled: true,
       actionType: 'drink_ready',
       message: `${RECIPES[prep.activeDrink].name} is ready! Press [Enter] or click customer to serve.`,
+      stationId: 'cup_counter',
     };
   }
 
+  // Ensure activeDrink matches the front waiting customer's order if one is waiting
+  if (waitingCustomer && (!prep.activeDrink || prep.currentStepIndex === 0)) {
+    prep.activeDrink = waitingCustomer.order;
+  } else if (!prep.activeDrink) {
+    prep.activeDrink = stationId === 'kettle' ? 'catnip_herbal_tea' : 'miata_mocha';
+  }
+
+  const recipe = RECIPES[prep.activeDrink];
+  const expectedStationId = recipe.steps[prep.currentStepIndex];
+
+  // Smooth Mobile QoL: If the player clicks any brewing station (or if auto-completing the previous step advanced us to the next step),
+  // automatically use the expected station for the current step so no click is ever wasted!
+  const effectiveStationId: StationId = expectedStationId ?? stationId;
+  const station = STATIONS.find((s) => s.id === effectiveStationId);
+  const speedMultiplier = state.barista.speedBoostTimer > 0 ? 0.68 : 1.0;
+  const duration = (station ? station.processDuration : 0.45) * speedMultiplier;
+
+  prep.processingStation = effectiveStationId;
+  prep.processDuration = duration;
+  prep.processTimer = duration;
+
+  const stepNum = prep.currentStepIndex + 1;
+  state.lastMessage = `Step ${stepNum}/3: ${recipe.stepLabels[prep.currentStepIndex]} (${recipe.name})...`;
+
   return {
-    handled: false,
-    actionType: 'wrong_station',
-    message: 'Follow the ▼ NEXT arrow over the counter appliances!',
+    handled: true,
+    actionType: 'start_step',
+    message: state.lastMessage,
+    stationId: effectiveStationId,
   };
 }
 
@@ -812,13 +1188,25 @@ export function executeSmartStep(state: CafeState): {
   state.room = 'inside';
   const prep = state.prep;
 
+  // If a station is currently processing, complete it immediately AND proceed!
   if (prep.processingStation !== null && prep.processTimer > 0) {
+    const finishedSt = STATIONS.find((s) => s.id === prep.processingStation);
+    if (finishedSt) {
+      spawnPopup(
+        state,
+        `✓ ${finishedSt.shortLabel.toUpperCase()}`,
+        finishedSt.x,
+        finishedSt.y - 26,
+        '#4ade80',
+        'inside'
+      );
+    }
     prep.processingStation = null;
     prep.processTimer = 0;
     prep.currentStepIndex = Math.min(3, prep.currentStepIndex + 1);
   }
 
-  const waitingCustomer = state.customers.find((c) => c.state === 'waiting');
+  const waitingCustomer = getFrontWaitingCustomer(state);
   if (
     waitingCustomer &&
     prep.activeDrink &&
@@ -835,8 +1223,8 @@ export function executeSmartStep(state: CafeState): {
 
   const nextStation = getRecommendedStation(state);
   if (nextStation) {
-    interactWithStation(state, nextStation);
-    return { type: 'station', stationId: nextStation };
+    const res = interactWithStation(state, nextStation);
+    return { type: 'station', stationId: res.stationId ?? nextStation };
   }
 
   return { type: 'none' };
@@ -857,18 +1245,10 @@ export function advancePrepTimer(state: CafeState, dt: number): boolean {
       spawnPopup(state, `✓ ${stObj.shortLabel.toUpperCase()}`, stObj.x, stObj.y - 26, '#4ade80', 'inside');
     }
 
-    if (prep.currentStepIndex === 1) {
-      if (prep.activeDrink === 'catnip_herbal_tea') {
-        state.lastMessage = 'Water boiled! Next: Click Tea Leaves [5] (▼ NEXT).';
-      } else if (prep.activeDrink === 'miata_mocha') {
-        state.lastMessage = 'Roast ground! Next: Click Espresso [2] (▼ NEXT).';
-      } else {
-        state.lastMessage = 'Grounds ready! Next: Click Frother [3] (▼ NEXT).';
-      }
-    } else if (prep.currentStepIndex === 2) {
-      state.lastMessage = `${recipe?.shortName ?? 'Drink'} brewed! Next: Click Pour Cup [Space] (▼ NEXT).`;
+    if (prep.currentStepIndex < 3 && recipe) {
+      state.lastMessage = `Step ${prep.currentStepIndex}/3 done! Next: ${recipe.stepLabels[prep.currentStepIndex]}`;
     } else if (prep.currentStepIndex === 3) {
-      state.lastMessage = `${recipe?.name ?? 'Drink'} READY! Click Customer, ⚡ Smart Step, or [Enter] to serve!`;
+      state.lastMessage = `${recipe?.name ?? 'Drink'} READY! Tap ⚡ BREW / SERVE, Customer, or [Enter] to serve!`;
     }
     return true;
   }
@@ -880,21 +1260,22 @@ export interface ServeResult {
   customer?: CustomerEntity;
   coinsEarned: number;
   heartsEarned: number;
+  goalJustReached?: boolean;
   message: string;
 }
 
-export function serveWaitingCustomer(state: CafeState): ServeResult {
+export function serveWaitingCustomer(state: CafeState, fromAutoStaff = false): ServeResult {
   const prep = state.prep;
   if (prep.currentStepIndex < 3 || !prep.activeDrink) {
     return {
       served: false,
       coinsEarned: 0,
       heartsEarned: 0,
-      message: 'Finish all 3 prep steps first (or tap ⚡ Smart Step)!',
+      message: 'Finish all 3 prep steps first (or tap ⚡ BREW / SERVE)!',
     };
   }
 
-  const waitingCustomer = state.customers.find((c) => c.state === 'waiting');
+  const waitingCustomer = getFrontWaitingCustomer(state);
   if (!waitingCustomer) {
     return {
       served: false,
@@ -904,28 +1285,26 @@ export function serveWaitingCustomer(state: CafeState): ServeResult {
     };
   }
 
-  const craftedDrink = prep.activeDrink;
+  // Align drink with waitingCustomer so players never get stuck with a mismatched drink
+  const craftedDrink = waitingCustomer.order;
   const recipe = RECIPES[craftedDrink];
-  const matchesOrder = waitingCustomer.order === craftedDrink;
-
-  if (!matchesOrder) {
-    const expected = RECIPES[waitingCustomer.order];
-    state.lastMessage = `${waitingCustomer.name} ordered ${expected.shortName}! Clear [X] and brew their order.`;
-    return {
-      served: false,
-      coinsEarned: 0,
-      heartsEarned: 0,
-      message: state.lastMessage,
-    };
-  }
 
   const cozyBonus = state.cozyRating >= 80 ? 5 : state.cozyRating >= 60 ? 3 : 0;
   const coinsEarned = recipe.price + cozyBonus;
   const heartsEarned = state.cozyRating >= 75 ? 2 : 1;
 
   state.coins += coinsEarned;
+  state.tipJarCoins += 3;
   state.hearts += heartsEarned;
   state.servedCount += 1;
+
+  let goalJustReached = false;
+  if (state.servedCount >= state.dailyTarget && !state.shiftGoalReachedShown) {
+    state.shiftGoalReachedShown = true;
+    state.shiftSuccessBannerVisible = true;
+    goalJustReached = true;
+  }
+
   state.cozyRating = calculateCozyRating(
     state.daisies,
     state.hearts,
@@ -945,16 +1324,19 @@ export function serveWaitingCustomer(state: CafeState): ServeResult {
     waitingCustomer.x,
     waitingCustomer.y - 32,
     '#facc15',
-    state.room
+    'inside'
   );
 
-  // Seat customer either at an Indoor Lounge Table (seats 0..2) or Outdoor Garden Table (seats 3..6)
+  // Seat customer at an Indoor Lounge Table, Garage Showroom Table, or Outdoor Garden Table
   const occupiedSeats = new Set(
     state.customers.filter((c) => c.state === 'sipping' && c.seatIndex !== null).map((c) => c.seatIndex!)
   );
   const allSeats = [
-    ...INDOOR_TABLES.map((t, i) => ({ idx: i, room: 'inside' as RoomId, x: t.x, y: t.y })),
-    ...GARDEN_TABLES.map((t, i) => ({ idx: i + 3, room: 'garden' as RoomId, x: t.x, y: t.y })),
+    { idx: 0, room: 'inside' as RoomId, x: INDOOR_TABLES[1].x, y: INDOOR_TABLES[1].y },
+    { idx: 1, room: 'inside' as RoomId, x: INDOOR_TABLES[2].x, y: INDOOR_TABLES[2].y },
+    { idx: 2, room: 'inside' as RoomId, x: GARAGE_TABLES[1].x, y: GARAGE_TABLES[1].y },
+    { idx: 3, room: 'garden' as RoomId, x: GARDEN_TABLES[1].x, y: GARDEN_TABLES[1].y },
+    { idx: 4, room: 'garden' as RoomId, x: GARDEN_TABLES[2].x, y: GARDEN_TABLES[2].y },
   ];
   const freeSeat = allSeats.find((s) => !occupiedSeats.has(s.idx));
 
@@ -971,43 +1353,96 @@ export function serveWaitingCustomer(state: CafeState): ServeResult {
     }
     waitingCustomer.targetX = freeSeat.x;
     waitingCustomer.targetY = freeSeat.y;
-    waitingCustomer.sipTimer = 10.0;
+    waitingCustomer.sipTimer = 9.0;
   } else {
     waitingCustomer.state = 'walking_out';
     waitingCustomer.targetX = 356;
     waitingCustomer.targetY = 475;
   }
 
-  state.lastMessage = `Served ${recipe.name} to ${waitingCustomer.name}! +${coinsEarned} Coins & +${heartsEarned} ♥`;
+  // Advance remaining queue customers forward to Slot 0!
+  const remainingQueue = state.customers
+    .filter((c) => c.id !== waitingCustomer.id && (c.state === 'waiting' || c.state === 'walking_in'))
+    .sort((a, b) => a.queueSlot - b.queueSlot);
+
+  remainingQueue.forEach((c, idx) => {
+    c.queueSlot = idx;
+    if (idx === 0) {
+      c.state = 'waiting';
+    }
+    const slot = COUNTER_QUEUE_SLOTS[Math.min(idx, COUNTER_QUEUE_SLOTS.length - 1)];
+    c.targetX = slot.x;
+    c.targetY = slot.y;
+  });
+
+  // Immediately spawn a replacement customer at the back of the 2-slot queue if needed
+  const drinkKeys: DrinkId[] = [
+    'midnight_cold_brew',
+    'daisy_vanilla_latte',
+    'miata_mocha',
+    'catnip_herbal_tea',
+  ];
+  while (
+    state.customers.filter((c) => c.state === 'waiting' || c.state === 'walking_in').length < 2
+  ) {
+    const activeQ = state.customers.filter(
+      (c) => c.state === 'waiting' || c.state === 'walking_in'
+    );
+    const slotIdx = activeQ.length;
+    const slot = COUNTER_QUEUE_SLOTS[Math.min(slotIdx, COUNTER_QUEUE_SLOTS.length - 1)];
+    const seq = state.servedCount + slotIdx + 2;
+    const nextOrder = drinkKeys[seq % drinkKeys.length];
+    const nextName = NPC_NAMES[seq % NPC_NAMES.length];
+    const nextRecipe = RECIPES[nextOrder];
+    state.customers.push({
+      id: `cust-auto-${state.servedCount}-${slotIdx}-${Math.round(state.elapsedSeconds * 100)}`,
+      name: nextName,
+      spriteVariant: seq % 4,
+      order: nextOrder,
+      room: 'inside',
+      state: slotIdx === 0 ? 'waiting' : 'walking_in',
+      queueSlot: slotIdx,
+      x: slot.x,
+      y: slotIdx === 0 ? slot.y : 455,
+      targetX: slot.x,
+      targetY: slot.y,
+      seatIndex: null,
+      sipTimer: 0,
+      heartsGiven: 0,
+      dialogueText: `One ${nextRecipe.shortName}, please!`,
+      arrivalTime: state.elapsedSeconds,
+      walkDist: 0,
+    });
+  }
+
+  state.lastMessage = goalJustReached
+    ? `★ SHIFT SUCCESS! Daily goal (${state.servedCount}/${state.dailyTarget}) reached! Keep serving or finish shift.`
+    : `${fromAutoStaff ? 'Ken served' : 'Served'} ${recipe.name} to ${waitingCustomer.name}! +${coinsEarned}c & +3c in Tip Jar!`;
 
   return {
     served: true,
     customer: waitingCustomer,
     coinsEarned,
     heartsEarned,
+    goalJustReached,
     message: state.lastMessage,
   };
 }
 
 /**
- * Smart Auto-Switch QoL: Watering daisies automatically switches to the `garden` map!
+ * Immediately hydrates a target Daisy bed without clunky movement locks.
  */
-export function waterDaisyPatch(state: CafeState, daisyId: string): boolean {
+export function waterDaisyPatch(
+  state: CafeState,
+  daisyId: string,
+  fromAutoStaff = false
+): boolean {
   const patch = state.daisies.find((d) => d.id === daisyId);
   if (!patch) return false;
 
-  if (state.room !== 'garden') {
-    state.room = 'garden';
-    state.barista.x = 450;
-    state.barista.y = 190;
-  }
-
-  state.barista.targetX = Math.max(170, Math.min(730, patch.x));
-  state.barista.targetY = Math.max(160, Math.min(400, patch.y));
-
-  if (!state.prep.holdingWateringCan) {
-    state.prep.holdingWateringCan = true;
-    state.prep.waterCharges = 3;
+  if (!fromAutoStaff) {
+    state.barista.scaleX = 1.14;
+    state.barista.scaleY = 0.86;
   }
 
   const wasThirsty = patch.needsWater || patch.hydration < 85;
@@ -1015,11 +1450,6 @@ export function waterDaisyPatch(state: CafeState, daisyId: string): boolean {
   patch.needsWater = false;
   patch.bloomStage = 3;
   patch.lastWateredAt = state.elapsedSeconds;
-
-  state.prep.waterCharges = Math.max(0, state.prep.waterCharges - 1);
-  if (state.prep.waterCharges === 0) {
-    state.prep.holdingWateringCan = false;
-  }
 
   if (wasThirsty) {
     state.coins += 2;
@@ -1042,8 +1472,44 @@ export function waterDaisyPatch(state: CafeState, daisyId: string): boolean {
     'garden'
   );
 
-  state.lastMessage = `Watered ${patch.name} in the Backyard Garden! +2 Coins & Cozy Rating ${state.cozyRating}%.`;
+  state.lastMessage = `${fromAutoStaff ? 'Ken watered' : 'Watered'} ${patch.name}! +2 Coins & Cozy Rating ${state.cozyRating}%.`;
   return true;
+}
+
+/**
+ * Immediately hydrates all thirsty daisy beds at once when pressing `[💧 WATER]` or `[W]`,
+ * without forcing clunky room or movement locks!
+ */
+export function waterAllThirstyDaisies(state: CafeState): DaisyPatch[] {
+  const thirsty = state.daisies.filter((d) => d.needsWater || d.hydration < 90);
+  const targets = thirsty.length > 0 ? thirsty : [state.daisies[0]];
+
+  let bonusCoins = 0;
+  targets.forEach((patch) => {
+    const wasThirsty = patch.needsWater || patch.hydration < 85;
+    patch.hydration = 100;
+    patch.needsWater = false;
+    patch.bloomStage = 3;
+    patch.lastWateredAt = state.elapsedSeconds;
+    if (wasThirsty) bonusCoins += 2;
+    spawnPopup(state, '+💧 HYDRATED!', patch.x, patch.y - 24, '#38bdf8', 'garden');
+  });
+
+  state.coins += bonusCoins;
+  state.cozyRating = calculateCozyRating(
+    state.daisies,
+    state.hearts,
+    state.catPetBonus,
+    state.weather
+  );
+  state.bestCozyRating = Math.max(state.bestCozyRating, state.cozyRating);
+
+  state.lastMessage =
+    bonusCoins > 0
+      ? `Hydrated ${targets.length} Daisy Bed${targets.length > 1 ? 's' : ''}! +${bonusCoins} Coins & Cozy Rating ${state.cozyRating}%!`
+      : `All 6 Daisy Beds are 100% hydrated & blooming! Cozy Rating ${state.cozyRating}%.`;
+
+  return targets;
 }
 
 export function toggleMiataHeadlights(state: CafeState): boolean {
@@ -1060,7 +1526,7 @@ export function toggleMiataHeadlights(state: CafeState): boolean {
     'inside'
   );
   state.lastMessage = state.miataHeadlightsOn
-    ? '1990 Mazda Miata MX-5 pop-up headlights flipped UP! ★ Wink!'
+    ? 'Classic Red 1990 Mazda Miata MX-5 pop-up headlights flipped UP! ★ Wink!'
     : '1990 Mazda Miata MX-5 pop-up headlights retracted DOWN.';
   return state.miataHeadlightsOn;
 }

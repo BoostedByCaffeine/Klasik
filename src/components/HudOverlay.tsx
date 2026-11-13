@@ -6,7 +6,9 @@ import {
   RoomId,
   TimeOfDay,
   WeatherType,
+  MiataPaintColor,
 } from '../game/rules';
+import { DailyGoalProgressBar } from './DailyGoalProgressBar';
 
 export interface HudSnapshot {
   cozyRating: number;
@@ -20,15 +22,23 @@ export interface HudSnapshot {
   holdingWateringCan: boolean;
   thirstyDaisyCount: number;
   miataHeadlightsOn: boolean;
+  miataColor: MiataPaintColor;
   speedBoostActive: boolean;
   waitingCustomerName: string | null;
   waitingCustomerOrder: DrinkId | null;
+  queueCount: number;
   lastMessage: string;
   muted: boolean;
   bgmEnabled: boolean;
   room: RoomId;
   timeOfDay: TimeOfDay;
   weather: WeatherType;
+  realClock: string;
+  hiredStaffCount: number;
+  nextStaffName: string | null;
+  nextStaffCost: number | null;
+  tipJarCoins: number;
+  shiftSuccessBannerVisible: boolean;
 }
 
 interface TopHudBarProps {
@@ -40,6 +50,7 @@ interface TopHudBarProps {
   onToggleRoom: () => void;
   onCycleTimeOfDay: () => void;
   onCycleWeather: () => void;
+  onHireStaff: () => void;
   onPause: () => void;
   onRestart: () => void;
   onOpenCodeModal: () => void;
@@ -55,6 +66,7 @@ export const TopHudBar: React.FC<TopHudBarProps> = ({
   onToggleRoom,
   onCycleTimeOfDay,
   onCycleWeather,
+  onHireStaff,
   onPause,
   onRestart,
   onOpenCodeModal,
@@ -79,10 +91,24 @@ export const TopHudBar: React.FC<TopHudBarProps> = ({
     rain: '🌧️ RAIN',
   };
 
+  const canAffordStaff = hud.nextStaffCost !== null && hud.coins >= hud.nextStaffCost;
+
   return (
     <header className="w-full bg-[#0b0d12] border-b-[3px] border-[#f8fafc] px-2 py-1 shrink-0 flex flex-wrap items-center justify-between gap-1.5 overflow-x-hidden">
-      {/* Compact GBA Stat Strip */}
+      {/* Compact GBA Stat Strip + Daily Goal Progress Bar */}
       <div className="gba-frame px-2 py-1 flex flex-wrap items-center gap-2 shrink-0">
+        {/* Live Real-Time Clock */}
+        <div className="flex items-center gap-1" title="Real-Time Local Clock">
+          <span
+            data-testid="hud-real-clock"
+            className="text-[9px] font-['Press_Start_2P'] text-[#7dd3fc] tabular-nums"
+          >
+            🕒 {hud.realClock}
+          </span>
+        </div>
+
+        <div className="w-[2px] h-4 bg-[#334155]" />
+
         {/* Cozy Rating */}
         <div className="flex items-center gap-1">
           <span className="text-[8px] font-['Press_Start_2P'] text-[#94a3b8]">COZY</span>
@@ -109,19 +135,6 @@ export const TopHudBar: React.FC<TopHudBarProps> = ({
 
         <div className="w-[2px] h-4 bg-[#334155]" />
 
-        {/* Served */}
-        <div className="flex items-center gap-1">
-          <span className="text-[8px] font-['Press_Start_2P'] text-[#94a3b8]">SRV</span>
-          <span
-            data-testid="hud-served"
-            className="text-xs font-['Press_Start_2P'] text-[#f8fafc] tabular-nums"
-          >
-            {Math.round(hud.servedCount)}/{Math.round(hud.dailyTarget)}
-          </span>
-        </div>
-
-        <div className="w-[2px] h-4 bg-[#334155]" />
-
         {/* Coins */}
         <div className="flex items-center gap-1">
           <span className="text-[8px] font-['Press_Start_2P'] text-[#facc15]">$</span>
@@ -133,18 +146,14 @@ export const TopHudBar: React.FC<TopHudBarProps> = ({
           </span>
         </div>
 
-        {hud.servedCount >= hud.dailyTarget && (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.currentTarget.blur();
-              onFinishShift();
-            }}
-            className="gba-btn gba-btn-active px-2 py-0.5 text-[8px] cursor-pointer whitespace-nowrap shrink-0"
-          >
-            FINISH ★
-          </button>
-        )}
+        <div className="w-[2px] h-4 bg-[#334155]" />
+
+        {/* Daily Goal Progress Bar Component */}
+        <DailyGoalProgressBar
+          servedCount={hud.servedCount}
+          dailyTarget={hud.dailyTarget}
+          onFinishShift={onFinishShift}
+        />
       </div>
 
       {/* Center Classic Pokémon GBA White/Charcoal Dialogue & Recipe Guide Box */}
@@ -177,7 +186,7 @@ export const TopHudBar: React.FC<TopHudBarProps> = ({
         </span>
       </div>
 
-      {/* Right Room, Time, Weather, Audio & Utility Controls (Wraps cleanly without horizontal scroll) */}
+      {/* Right Room, Time, Weather, Staff Hire, Stations Drawer, Audio & Utility Controls */}
       <div className="gba-frame px-1.5 py-1 flex flex-wrap items-center gap-1 shrink-0">
         {/* Room Map Switcher [V] */}
         <button
@@ -229,6 +238,49 @@ export const TopHudBar: React.FC<TopHudBarProps> = ({
           <span className="text-[8px]">{weatherLabels[hud.weather]}</span>
         </button>
 
+        {/* Hire Cafe Staff [K] */}
+        <button
+          type="button"
+          tabIndex={-1}
+          data-testid="hud-hire-staff-btn"
+          aria-label="Hire Cafe Staff [K]"
+          title={
+            hud.nextStaffName
+              ? `Hire ${hud.nextStaffName} ($${hud.nextStaffCost}) [K]`
+              : 'All 2 Cafe Staff Hired!'
+          }
+          onClick={(e) => {
+            e.currentTarget.blur();
+            onHireStaff();
+          }}
+          className={`gba-btn px-1.5 h-6 flex items-center justify-center cursor-pointer whitespace-nowrap ${
+            canAffordStaff ? 'gba-btn-active' : 'text-[#fb7185]'
+          }`}
+        >
+          <span className="text-[8px]">
+            👩‍🍳 STAFF ({hud.hiredStaffCount}/2)
+            {hud.nextStaffCost !== null ? ` · $${hud.nextStaffCost}` : ' ★'}
+          </span>
+        </button>
+
+        {/* Collapsible Bottom Action Dock Toggle [🛠️ STATIONS] */}
+        <button
+          type="button"
+          tabIndex={-1}
+          data-testid="hud-stations-toggle-btn"
+          aria-expanded={!dockCollapsed}
+          aria-label={dockCollapsed ? 'Open Stations Drawer' : 'Close Stations Drawer'}
+          onClick={(e) => {
+            e.currentTarget.blur();
+            onToggleDock();
+          }}
+          className={`gba-btn px-1.5 h-6 flex items-center justify-center cursor-pointer whitespace-nowrap ${
+            !dockCollapsed ? 'gba-btn-active' : 'text-[#facc15]'
+          }`}
+        >
+          <span className="text-[8px]">🛠️ STATIONS</span>
+        </button>
+
         {/* 8-Bit Mono Chiptune BGM Toggle */}
         <button
           type="button"
@@ -259,21 +311,6 @@ export const TopHudBar: React.FC<TopHudBarProps> = ({
           className="gba-btn px-1.5 h-6 flex items-center justify-center cursor-pointer whitespace-nowrap"
         >
           <span className="text-[8px]">🔊 SFX:{hud.muted ? 'OFF' : 'ON'}</span>
-        </button>
-
-        {/* Collapsible Bottom Action Dock Toggle */}
-        <button
-          type="button"
-          tabIndex={-1}
-          aria-expanded={!dockCollapsed}
-          aria-label={dockCollapsed ? 'Show Recipes & Controls' : 'Hide Bottom Action Dock'}
-          onClick={(e) => {
-            e.currentTarget.blur();
-            onToggleDock();
-          }}
-          className="gba-btn px-1.5 h-6 flex items-center justify-center text-[#facc15] cursor-pointer whitespace-nowrap"
-        >
-          <span className="text-[8px]">{dockCollapsed ? '▲ DOCK' : '▼ DOCK'}</span>
         </button>
 
         {/* Single-File HTML Export Modal */}
@@ -328,46 +365,49 @@ export const TopHudBar: React.FC<TopHudBarProps> = ({
 interface FloatingCanvasQuickBarProps {
   hud: HudSnapshot;
   onSmartStep: () => void;
-  onWaterNextDaisy: () => void;
+  onWaterAllDaisies: () => void;
+  onHireStaff: () => void;
   onPetCats: () => void;
   onToggleRoom: () => void;
 }
 
 /**
  * Touch-friendly floating quick-action buttons positioned in the bottom-right corner
- * of the canvas stage so mobile & landscape players can play effortlessly even with the dock hidden!
+ * of the canvas stage so mobile & landscape players can play effortlessly with the bottom dock hidden by default!
  */
 export const FloatingCanvasQuickBar: React.FC<FloatingCanvasQuickBarProps> = ({
   hud,
   onSmartStep,
-  onWaterNextDaisy,
+  onWaterAllDaisies,
+  onHireStaff,
   onPetCats,
   onToggleRoom,
 }) => {
   const orderRecipe = hud.waitingCustomerOrder ? RECIPES[hud.waitingCustomerOrder] : null;
 
-  let smartLabel = '⚡ Smart Step';
+  let smartLabel = '⚡ BREW / SERVE';
   if (hud.currentStepIndex === 3) {
-    smartLabel = '⚡ Serve Guest!';
+    smartLabel = '⚡ SERVE GUEST!';
   } else if (orderRecipe) {
     const nextSt = orderRecipe.steps[hud.currentStepIndex];
     const shortMap: Record<StationId, string> = {
-      grinder: '⚡ Step 1: Grind',
-      espresso: '⚡ Step 2: Shot',
-      milk_frother: '⚡ Step 2: Foam',
-      kettle: '⚡ Step 1: Boil',
-      tea_leaves: '⚡ Step 2: Steep',
-      cup_counter: '⚡ Step 3: Pour',
-      watering_can: '⚡ Water',
-      trash: '⚡ Clear',
+      grinder: '⚡ STEP 1: GRIND',
+      espresso: '⚡ STEP 2: SHOT',
+      milk_frother: '⚡ STEP 2: FOAM',
+      kettle: '⚡ STEP 1: BOIL',
+      tea_leaves: '⚡ STEP 2: STEEP',
+      cup_counter: '⚡ STEP 3: POUR',
+      watering_can: '⚡ WATER',
+      trash: '⚡ CLEAR',
     };
-    smartLabel = shortMap[nextSt] ?? '⚡ Smart Step';
+    smartLabel = shortMap[nextSt] ?? '⚡ BREW / SERVE';
   }
 
   return (
     <div className="pointer-events-auto flex flex-wrap items-center justify-end gap-1.5">
       <button
         type="button"
+        data-testid="quick-smart-step-btn"
         onClick={(e) => {
           e.currentTarget.blur();
           onSmartStep();
@@ -379,35 +419,50 @@ export const FloatingCanvasQuickBar: React.FC<FloatingCanvasQuickBarProps> = ({
 
       <button
         type="button"
+        data-testid="quick-water-btn"
         onClick={(e) => {
           e.currentTarget.blur();
-          onWaterNextDaisy();
+          onWaterAllDaisies();
         }}
         className="gba-btn px-2 py-1.5 text-[9px] text-[#7dd3fc] cursor-pointer shadow-lg"
       >
-        💧 Water {hud.thirstyDaisyCount > 0 ? `(${hud.thirstyDaisyCount})` : ''}
+        💧 WATER {hud.thirstyDaisyCount > 0 ? `(${hud.thirstyDaisyCount})` : ''}
       </button>
 
       <button
         type="button"
+        data-testid="quick-hire-btn"
+        onClick={(e) => {
+          e.currentTarget.blur();
+          onHireStaff();
+        }}
+        className="gba-btn px-2 py-1.5 text-[9px] text-[#86efac] cursor-pointer shadow-lg"
+      >
+        👩‍🍳 HIRE ({hud.hiredStaffCount}/2)
+      </button>
+
+      <button
+        type="button"
+        data-testid="quick-pet-cat-btn"
         onClick={(e) => {
           e.currentTarget.blur();
           onPetCats();
         }}
         className="gba-btn px-2 py-1.5 text-[9px] text-[#fb7185] cursor-pointer shadow-lg"
       >
-        🐾 Pet Cat
+        🐾 PET CAT
       </button>
 
       <button
         type="button"
+        data-testid="quick-room-btn"
         onClick={(e) => {
           e.currentTarget.blur();
           onToggleRoom();
         }}
         className="gba-btn px-2 py-1.5 text-[9px] text-[#facc15] cursor-pointer shadow-lg"
       >
-        🚪 Room: {hud.room === 'inside' ? 'INSIDE' : 'GARDEN'}
+        🚪 {hud.room === 'inside' ? 'TO GARDEN' : 'TO INSIDE'}
       </button>
     </div>
   );
@@ -418,7 +473,7 @@ interface BottomActionDockProps {
   collapsed: boolean;
   onTriggerStation: (stationId: StationId) => void;
   onServeCustomer: () => void;
-  onWaterNextDaisy: () => void;
+  onWaterAllDaisies: () => void;
   onToggleMiataHeadlights: () => void;
   onPetCats: () => void;
 }
@@ -428,7 +483,7 @@ export const BottomActionDock: React.FC<BottomActionDockProps> = ({
   collapsed,
   onTriggerStation,
   onServeCustomer,
-  onWaterNextDaisy,
+  onWaterAllDaisies,
   onToggleMiataHeadlights,
   onPetCats,
 }) => {
@@ -440,12 +495,15 @@ export const BottomActionDock: React.FC<BottomActionDockProps> = ({
   const activeRecipe = hud.activeDrink ? RECIPES[hud.activeDrink] : null;
 
   let nextStationId: StationId | null = null;
-  if (orderRecipe && hud.currentStepIndex < 3 && !hud.isProcessing) {
+  if (orderRecipe && hud.currentStepIndex < 3) {
     nextStationId = orderRecipe.steps[hud.currentStepIndex];
   }
 
   return (
-    <footer className="w-full bg-[#0b0d12] border-t-[3px] border-[#f8fafc] px-1.5 py-1 shrink-0 flex flex-wrap items-center justify-center gap-1 overflow-x-hidden">
+    <footer
+      data-testid="bottom-stations-dock"
+      className="w-full bg-[#0b0d12] border-t-[3px] border-[#f8fafc] px-1.5 py-1 shrink-0 flex flex-wrap items-center justify-center gap-1 overflow-x-hidden"
+    >
       <StationDockButton
         label="Grinder"
         roleClue="Step 1 · Coffee"
@@ -523,7 +581,7 @@ export const BottomActionDock: React.FC<BottomActionDockProps> = ({
         type="button"
         onClick={(e) => {
           e.currentTarget.blur();
-          onWaterNextDaisy();
+          onWaterAllDaisies();
         }}
         className="gba-btn px-1.5 py-0.5 text-left cursor-pointer whitespace-nowrap shrink-0"
       >

@@ -5,24 +5,35 @@ import {
   STATIONS,
   RECIPES,
   MIATA_GARAGE_BOUNDS,
+  TIP_JAR_BOUNDS,
+  TOOL_CHEST_BOUNDS,
+  COUNTER_QUEUE_SLOTS,
   INSIDE_DOOR_MAT,
   GARDEN_DOOR_MAT,
   GARDEN_ORDER_WINDOW,
   DrinkId,
   StationId,
   RoomId,
+  CatBehaviorState,
   NPC_NAMES,
   interactWithStation,
   advancePrepTimer,
   serveWaitingCustomer,
   waterDaisyPatch,
+  waterAllThirstyDaisies,
   toggleMiataHeadlights,
+  cycleMiataPaintColor,
+  collectTipJar,
+  triggerPhotoSquadFlash,
+  hireNextStaff,
   petCatCompanion,
   executeSmartStep,
   toggleRoom,
   cycleTimeOfDay,
   cycleWeather,
   advanceEnvironmentAndHydration,
+  screenToWorldContain,
+  formatRealClock,
 } from './game/rules';
 import {
   ParticlePool,
@@ -38,12 +49,18 @@ import {
   FloatingCanvasQuickBar,
   HudSnapshot,
 } from './components/HudOverlay';
+import { ShiftSuccessNotification } from './components/DailyGoalProgressBar';
 import { StatusModal, RunSummarySnapshot } from './components/StatusModal';
 import { CodeExportModal } from './components/CodeExportModal';
 
 function makeHudSnapshot(state: CafeState): HudSnapshot {
   const waitingCustomer = state.customers.find((c) => c.state === 'waiting') ?? null;
+  const queueCount = state.customers.filter(
+    (c) => c.state === 'waiting' || c.state === 'walking_in'
+  ).length;
   const thirstyDaisyCount = state.daisies.filter((d) => d.needsWater).length;
+  const hiredStaffCount = state.staff.filter((s) => s.hired).length;
+  const nextStaff = state.staff.find((s) => !s.hired) ?? null;
 
   return {
     cozyRating: state.cozyRating,
@@ -57,15 +74,23 @@ function makeHudSnapshot(state: CafeState): HudSnapshot {
     holdingWateringCan: state.prep.holdingWateringCan,
     thirstyDaisyCount,
     miataHeadlightsOn: state.miataHeadlightsOn,
+    miataColor: state.miataColor,
     speedBoostActive: state.barista.speedBoostTimer > 0,
     waitingCustomerName: waitingCustomer ? waitingCustomer.name : null,
     waitingCustomerOrder: waitingCustomer ? waitingCustomer.order : null,
+    queueCount,
     lastMessage: state.lastMessage,
     muted: soundEngine.muted,
     bgmEnabled: soundEngine.bgmEnabled,
     room: state.room,
     timeOfDay: state.timeOfDay,
     weather: state.weather,
+    realClock: formatRealClock(new Date()),
+    hiredStaffCount,
+    nextStaffName: nextStaff ? nextStaff.name : null,
+    nextStaffCost: nextStaff ? nextStaff.cost : null,
+    tipJarCoins: state.tipJarCoins,
+    shiftSuccessBannerVisible: state.shiftSuccessBannerVisible,
   };
 }
 
@@ -86,7 +111,8 @@ export default function App() {
   const [uiMode, setUiMode] = useState<'title' | 'playing' | 'paused' | 'gameover'>(
     autostart ? 'playing' : 'title'
   );
-  const [dockCollapsed, setDockCollapsed] = useState<boolean>(false);
+  // Bottom station dock is HIDDEN/COLLAPSED by default to maximize mobile & landscape canvas space!
+  const [dockCollapsed, setDockCollapsed] = useState<boolean>(true);
   const [hud, setHud] = useState<HudSnapshot>(() => makeHudSnapshot(gameStateRef.current));
   const [summaryStats, setSummaryStats] = useState<RunSummarySnapshot>({
     dayNumber: 1,
@@ -113,15 +139,21 @@ export default function App() {
         prev.holdingWateringCan === next.holdingWateringCan &&
         prev.thirstyDaisyCount === next.thirstyDaisyCount &&
         prev.miataHeadlightsOn === next.miataHeadlightsOn &&
+        prev.miataColor === next.miataColor &&
         prev.speedBoostActive === next.speedBoostActive &&
         prev.waitingCustomerName === next.waitingCustomerName &&
         prev.waitingCustomerOrder === next.waitingCustomerOrder &&
+        prev.queueCount === next.queueCount &&
         prev.lastMessage === next.lastMessage &&
         prev.muted === next.muted &&
         prev.bgmEnabled === next.bgmEnabled &&
         prev.room === next.room &&
         prev.timeOfDay === next.timeOfDay &&
-        prev.weather === next.weather
+        prev.weather === next.weather &&
+        prev.realClock === next.realClock &&
+        prev.hiredStaffCount === next.hiredStaffCount &&
+        prev.tipJarCoins === next.tipJarCoins &&
+        prev.shiftSuccessBannerVisible === next.shiftSuccessBannerVisible
       ) {
         return prev;
       }
@@ -189,6 +221,11 @@ export default function App() {
     soundEngine.playServeSuccess();
     syncBodyMode('gameover');
   }, [syncBodyMode]);
+
+  const handleDismissShiftSuccessBanner = useCallback(() => {
+    gameStateRef.current.shiftSuccessBannerVisible = false;
+    syncHudNow();
+  }, [syncHudNow]);
 
   const handleTriggerStation = useCallback(
     (stationId: StationId) => {
@@ -310,14 +347,19 @@ export default function App() {
     [syncHudNow]
   );
 
-  const handleWaterNextDaisy = useCallback(() => {
+  const handleWaterAllDaisies = useCallback(() => {
     const st = gameStateRef.current;
     if (st.mode !== 'playing') return;
-    const sorted = [...st.daisies].sort((a, b) => a.hydration - b.hydration);
-    if (sorted[0]) {
-      handleWaterDaisyById(sorted[0].id);
-    }
-  }, [handleWaterDaisyById]);
+    waterAllThirstyDaisies(st);
+    st.barista.scaleX = 1.16;
+    st.barista.scaleY = 0.85;
+    soundEngine.playWaterDaisies();
+    st.daisies.forEach((patch) => {
+      particlesRef.current.emitBurst('water', patch.x, patch.y - 8, 10);
+      particlesRef.current.emitBurst('sparkle', patch.x, patch.y - 14, 5);
+    });
+    syncHudNow();
+  }, [syncHudNow]);
 
   const handleToggleMiataHeadlights = useCallback(() => {
     const st = gameStateRef.current;
@@ -330,6 +372,56 @@ export default function App() {
       MIATA_GARAGE_BOUNDS.y + 44,
       10
     );
+    syncHudNow();
+  }, [syncHudNow]);
+
+  const handleCycleMiataPaint = useCallback(() => {
+    const st = gameStateRef.current;
+    if (st.mode !== 'playing') return;
+    cycleMiataPaintColor(st);
+    soundEngine.playStepReady();
+    particlesRef.current.emitBurst(
+      'sparkle',
+      MIATA_GARAGE_BOUNDS.x,
+      MIATA_GARAGE_BOUNDS.y,
+      14
+    );
+    syncHudNow();
+  }, [syncHudNow]);
+
+  const handleCollectTipJar = useCallback(() => {
+    const st = gameStateRef.current;
+    if (st.mode !== 'playing') return;
+    const gained = collectTipJar(st);
+    if (gained > 0) {
+      soundEngine.playServeSuccess();
+      particlesRef.current.emitBurst('sparkle', TIP_JAR_BOUNDS.x, TIP_JAR_BOUNDS.y - 8, 12);
+    } else {
+      soundEngine.playStep();
+    }
+    syncHudNow();
+  }, [syncHudNow]);
+
+  const handlePhotoSquadSnap = useCallback(() => {
+    const st = gameStateRef.current;
+    if (st.mode !== 'playing') return;
+    triggerPhotoSquadFlash(st);
+    soundEngine.playStepReady();
+    particlesRef.current.emitBurst('sparkle', 748, 320, 12);
+    syncHudNow();
+  }, [syncHudNow]);
+
+  const handleHireStaff = useCallback(() => {
+    const st = gameStateRef.current;
+    if (st.mode !== 'playing') return;
+    const res = hireNextStaff(st);
+    if (res.hired && res.worker) {
+      soundEngine.playServeSuccess();
+      particlesRef.current.emitBurst('sparkle', res.worker.x, res.worker.y - 16, 16);
+      particlesRef.current.emitBurst('heart', res.worker.x, res.worker.y - 24, 10);
+    } else {
+      soundEngine.playStep();
+    }
     syncHudNow();
   }, [syncHudNow]);
 
@@ -370,15 +462,12 @@ export default function App() {
     syncHudNow();
   }, [syncHudNow]);
 
+  // 100% Pixel-Accurate Coordinate Mapping for `object-fit: contain` letterboxing/pillarboxing
   const screenToWorld = useCallback((clientX: number, clientY: number) => {
     const canvas = canvasRef.current;
     if (!canvas) return { x: 0, y: 0 };
     const rect = canvas.getBoundingClientRect();
-    if (rect.width === 0 || rect.height === 0) return { x: 0, y: 0 };
-    return {
-      x: ((clientX - rect.left) / rect.width) * WORLD_WIDTH,
-      y: ((clientY - rect.top) / rect.height) * WORLD_HEIGHT,
-    };
+    return screenToWorldContain(clientX, clientY, rect, WORLD_WIDTH, WORLD_HEIGHT);
   }, []);
 
   useEffect(() => {
@@ -450,9 +539,11 @@ export default function App() {
           e.preventDefault();
           handleServeCustomer();
         } else if (key === 'w') {
-          handleWaterNextDaisy();
+          handleWaterAllDaisies();
         } else if (key === 'h') {
           handleToggleMiataHeadlights();
+        } else if (key === 'k') {
+          handleHireStaff();
         } else if (key === 'c') {
           handlePetCat();
         } else if (key === 'v') {
@@ -498,8 +589,9 @@ export default function App() {
     handleTriggerStation,
     handleServeCustomer,
     handleSmartStep,
-    handleWaterNextDaisy,
+    handleWaterAllDaisies,
     handleToggleMiataHeadlights,
+    handleHireStaff,
     handlePetCat,
     handleToggleRoom,
     handleCycleTimeOfDay,
@@ -514,7 +606,7 @@ export default function App() {
     let timerId = 0;
     let cancelled = false;
     let lastTime = performance.now();
-    let customerIdCounter = 2;
+    let customerIdCounter = 3;
 
     const tick = (now: number) => {
       if (cancelled) return;
@@ -591,10 +683,10 @@ export default function App() {
         if (keys.has('s') || keys.has('arrowdown')) moveY += 1;
 
         const baseSpeed = st.barista.speedBoostTimer > 0 ? 225 : 165;
-        const minX = st.room === 'inside' ? 64 : 64;
-        const maxX = st.room === 'inside' ? 840 : 840;
+        const minX = 64;
+        const maxX = 840;
         const minY = st.room === 'inside' ? 145 : 128;
-        const maxY = st.room === 'inside' ? 435 : 435;
+        const maxY = 435;
 
         if (moveX !== 0 || moveY !== 0) {
           const len = Math.hypot(moveX, moveY);
@@ -638,10 +730,10 @@ export default function App() {
           updateHudIfChanged(st);
         }
 
-        // 3. Multi-State Smooth Waypoint Cats (Lilo inside Cafe/Garage & Champy in Garden)
+        // 3. Expanded 6-State Cats (Lilo inside Cafe/Garage & Champy in Garden)
         st.cats.forEach((cat) => {
           cat.tailPhase += simDt * 2.6;
-          if (cat.state === 'pouncing') {
+          if (cat.state === 'yarn_play') {
             cat.hopPhase += simDt;
           } else {
             cat.hopPhase = 0;
@@ -650,11 +742,11 @@ export default function App() {
             cat.heartTimer = Math.max(0, cat.heartTimer - simDt);
           }
 
-          if (cat.state === 'walking' || cat.state === 'pouncing') {
+          if (cat.state === 'walking') {
             const cdx = cat.targetX - cat.x;
             const cdy = cat.targetY - cat.y;
             const cdist = Math.hypot(cdx, cdy);
-            const moveSpeed = cat.state === 'pouncing' ? 72 : 48;
+            const moveSpeed = 52;
             if (cdist > 2) {
               const cstep = Math.min(cdist, moveSpeed * simDt);
               cat.x += (cdx / cdist) * cstep;
@@ -667,28 +759,33 @@ export default function App() {
           } else {
             cat.stateTimer -= simDt;
             if (cat.stateTimer <= 0) {
+              const restCycle: CatBehaviorState[] = [
+                'napping',
+                'sitting_grooming',
+                'stretching',
+                'yarn_play',
+                'purring',
+              ];
+              const nextBehavior = restCycle[Math.floor(Math.random() * restCycle.length)];
               if (cat.id === 'lilo') {
-                // Lilo smoothly walks between the 1990 Miata MX-5 hood (748, 274),
-                // the Indoor Cafe Rug (496, 246), and the Indoor Lounge (264, 348)
                 const liloWaypoints = [
-                  { x: 748, y: 274, rest: 'napping' as const },
-                  { x: 496, y: 246, rest: 'sitting_grooming' as const },
-                  { x: 264, y: 348, rest: 'sitting_grooming' as const },
+                  { x: 748, y: 274 },
+                  { x: 496, y: 246 },
+                  { x: 264, y: 348 },
                 ];
                 const nextSpot =
                   liloWaypoints.find((w) => Math.hypot(w.x - cat.x, w.y - cat.y) > 40) ??
                   liloWaypoints[0];
                 cat.targetX = nextSpot.x;
                 cat.targetY = nextSpot.y;
-                cat.nextStateAfterWalk = nextSpot.rest;
+                cat.nextStateAfterWalk = nextBehavior;
                 cat.state = 'walking';
               } else {
-                // Champy smoothly walks & pounces around the 6 Daisy Beds & Garden Well
                 const champyWaypoints = [
-                  { x: 310, y: 332, rest: 'sitting_grooming' as const, hop: false },
-                  { x: 204, y: 390, rest: 'napping' as const, hop: true },
-                  { x: 590, y: 332, rest: 'sitting_grooming' as const, hop: false },
-                  { x: 696, y: 390, rest: 'napping' as const, hop: true },
+                  { x: 310, y: 332 },
+                  { x: 204, y: 390 },
+                  { x: 590, y: 332 },
+                  { x: 696, y: 390 },
                 ];
                 const candidates = champyWaypoints.filter(
                   (w) => Math.hypot(w.x - cat.x, w.y - cat.y) > 45
@@ -697,14 +794,14 @@ export default function App() {
                   candidates[Math.floor(Math.random() * candidates.length)] ?? champyWaypoints[0];
                 cat.targetX = pick.x;
                 cat.targetY = pick.y;
-                cat.nextStateAfterWalk = pick.rest;
-                cat.state = pick.hop ? 'pouncing' : 'walking';
+                cat.nextStateAfterWalk = nextBehavior;
+                cat.state = 'walking';
               }
             }
           }
         });
 
-        // 4. Environment Progression (Day/Sunset/Night + Weather + Rain Daisy Hydration!)
+        // 4. Environment, Couples, Photo Squad & Hired Staff Workers Progression
         let needsHudRefresh = advanceEnvironmentAndHydration(st, simDt);
 
         // 5. Update Floating World Popups
@@ -717,7 +814,7 @@ export default function App() {
           }
         }
 
-        // 6. Update NPC Customers (both Inside and in the Backyard Garden!)
+        // 6. Update NPC Customers (both Inside and in the Backyard Garden + 2-slot Counter Queue!)
         for (let i = st.customers.length - 1; i >= 0; i--) {
           const c = st.customers[i];
           const dx = c.targetX - c.x;
@@ -749,10 +846,23 @@ export default function App() {
           }
         }
 
-        const hasCounterCustomer = st.customers.some(
+        // Keep up to 2 customers in the active counter queue
+        const queueCustomers = st.customers.filter(
           (c) => c.state === 'walking_in' || c.state === 'waiting'
         );
-        if (!hasCounterCustomer) {
+        // Ensure first waiting customer moves up to slot 0
+        if (queueCustomers[0]) {
+          queueCustomers[0].targetX = COUNTER_QUEUE_SLOTS[0].x;
+          queueCustomers[0].targetY = COUNTER_QUEUE_SLOTS[0].y;
+        }
+        if (queueCustomers[1]) {
+          queueCustomers[1].targetX = COUNTER_QUEUE_SLOTS[1].x;
+          queueCustomers[1].targetY = COUNTER_QUEUE_SLOTS[1].y;
+        }
+
+        if (queueCustomers.length < 2) {
+          const slotIndex = queueCustomers.length;
+          const slot = COUNTER_QUEUE_SLOTS[slotIndex] ?? COUNTER_QUEUE_SLOTS[0];
           const drinkKeys: DrinkId[] = [
             'midnight_cold_brew',
             'daisy_vanilla_latte',
@@ -769,10 +879,11 @@ export default function App() {
             order: nextOrder,
             room: 'inside',
             state: 'walking_in',
-            x: 356,
-            y: 455,
-            targetX: 356,
-            targetY: 312,
+            queueSlot: slotIndex,
+            x: slot.x,
+            y: 455 + slotIndex * 24,
+            targetX: slot.x,
+            targetY: slot.y,
             seatIndex: null,
             sipTimer: 0,
             heartsGiven: 0,
@@ -811,7 +922,7 @@ export default function App() {
         if (!cancelled) {
           rafId = requestAnimationFrame(tick);
         }
-      }, 16);
+      }, 40);
     };
 
     rafId = requestAnimationFrame(tick);
@@ -884,7 +995,31 @@ export default function App() {
         return;
       }
 
-      // Check 1990 Mazda Miata MX-5 in the Garage Showroom
+      // Check Counter Tip Jar
+      if (
+        Math.abs(x - TIP_JAR_BOUNDS.x) <= TIP_JAR_BOUNDS.width / 2 + 8 &&
+        Math.abs(y - TIP_JAR_BOUNDS.y) <= TIP_JAR_BOUNDS.height / 2 + 8
+      ) {
+        handleCollectTipJar();
+        return;
+      }
+
+      // Check Garage Mechanic Tool Chest -> Cycle Miata Custom Paint
+      if (
+        Math.abs(x - TOOL_CHEST_BOUNDS.x) <= TOOL_CHEST_BOUNDS.width / 2 + 8 &&
+        Math.abs(y - TOOL_CHEST_BOUNDS.y) <= TOOL_CHEST_BOUNDS.height / 2 + 8
+      ) {
+        handleCycleMiataPaint();
+        return;
+      }
+
+      // Check Miata Photo Squad (Trio of Friends)
+      if (Math.abs(x - 748) <= 68 && Math.abs(y - 328) <= 32) {
+        handlePhotoSquadSnap();
+        return;
+      }
+
+      // Check Classic Red 1990 Mazda Miata MX-5 in the Garage Showroom
       if (
         Math.abs(x - MIATA_GARAGE_BOUNDS.x) <= MIATA_GARAGE_BOUNDS.width / 2 &&
         Math.abs(y - MIATA_GARAGE_BOUNDS.y) <= MIATA_GARAGE_BOUNDS.height / 2
@@ -893,11 +1028,11 @@ export default function App() {
         return;
       }
 
-      // Check waiting Customer or their Pokémon GBA dialogue box
+      // Check waiting Customers or their Pokémon GBA dialogue box
       const waitingCustomer = st.customers.find((c) => c.state === 'waiting');
       if (
         waitingCustomer &&
-        x >= waitingCustomer.x - 32 &&
+        x >= waitingCustomer.x - 90 &&
         x <= waitingCustomer.x + 220 &&
         y >= waitingCustomer.y - 44 &&
         y <= waitingCustomer.y + 36
@@ -934,14 +1069,14 @@ export default function App() {
         return;
       }
 
-      // Check Center Garden Watering Well
+      // Check Center Garden Watering Well -> Hydrate all thirsty daisies!
       const well = STATIONS.find((s) => s.id === 'watering_can');
       if (
         well &&
         Math.abs(x - well.x) <= well.width / 2 + 8 &&
         Math.abs(y - well.y) <= well.height / 2 + 8
       ) {
-        handleTriggerStation('watering_can');
+        handleWaterAllDaisies();
         return;
       }
 
@@ -979,6 +1114,7 @@ export default function App() {
           onToggleRoom={() => handleToggleRoom()}
           onCycleTimeOfDay={handleCycleTimeOfDay}
           onCycleWeather={handleCycleWeather}
+          onHireStaff={handleHireStaff}
           onPause={() => {
             const st = gameStateRef.current;
             setSummaryStats({
@@ -998,7 +1134,7 @@ export default function App() {
         />
       )}
 
-      {/* Dedicated Non-Overlapping GBA Pixel-Art Viewport Stage + Floating Corner Quick-Actions */}
+      {/* Dedicated Non-Overlapping GBA Pixel-Art Viewport Stage + Shift Success Banner + Floating Corner Quick-Actions */}
       <div className="relative flex-1 min-h-0 w-full flex items-center justify-center p-1 bg-[#0b0d12]">
         <canvas
           ref={canvasRef}
@@ -1011,13 +1147,27 @@ export default function App() {
           style={{ imageRendering: 'pixelated' }}
         />
 
+        {/* Shift Success Notification Banner when Daily Goal is Reached */}
+        {uiMode === 'playing' && (
+          <ShiftSuccessNotification
+            visible={hud.shiftSuccessBannerVisible}
+            servedCount={hud.servedCount}
+            dailyTarget={hud.dailyTarget}
+            coins={hud.coins}
+            cozyRating={hud.cozyRating}
+            onFinishShift={handleFinishShift}
+            onDismiss={handleDismissShiftSuccessBanner}
+          />
+        )}
+
         {/* Floating Touch-Friendly Quick-Action Buttons on the bottom-right corner of the viewport */}
         {uiMode === 'playing' && (
           <div className="pointer-events-none absolute bottom-2.5 right-3 z-10">
             <FloatingCanvasQuickBar
               hud={hud}
               onSmartStep={handleSmartStep}
-              onWaterNextDaisy={handleWaterNextDaisy}
+              onWaterAllDaisies={handleWaterAllDaisies}
+              onHireStaff={handleHireStaff}
               onPetCats={() => handlePetCat()}
               onToggleRoom={() => handleToggleRoom()}
             />
@@ -1025,14 +1175,14 @@ export default function App() {
         )}
       </div>
 
-      {/* Collapsible External Bottom GBA Action Dock */}
+      {/* Collapsible External Bottom GBA Action Dock (Hidden by Default) */}
       {uiMode !== 'title' && (
         <BottomActionDock
           hud={hud}
           collapsed={dockCollapsed}
           onTriggerStation={handleTriggerStation}
           onServeCustomer={handleServeCustomer}
-          onWaterNextDaisy={handleWaterNextDaisy}
+          onWaterAllDaisies={handleWaterAllDaisies}
           onToggleMiataHeadlights={handleToggleMiataHeadlights}
           onPetCats={() => handlePetCat()}
         />
