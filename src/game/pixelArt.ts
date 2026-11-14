@@ -2513,20 +2513,32 @@ export function renderCafeWorld(
   hoveredStationId: string | null,
   hoveredDaisyId: string | null,
   hoveredMiata = false,
-  camera?: Camera2D
+  camera?: Camera2D,
+  stageWidth = WORLD_WIDTH,
+  stageHeight = WORLD_HEIGHT
 ) {
   ctx.save();
   ctx.imageSmoothingEnabled = false;
 
-  ctx.fillStyle = '#090b10';
-  ctx.fillRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
+  const safeStageW = stageWidth > 0 ? stageWidth : WORLD_WIDTH;
+  const safeStageH = stageHeight > 0 ? stageHeight : WORLD_HEIGHT;
 
-  if (camera && camera.zoom > 1.001) {
-    const cam = clampCamera2D(camera, WORLD_WIDTH, WORLD_HEIGHT);
-    ctx.translate(WORLD_WIDTH / 2, WORLD_HEIGHT / 2);
-    ctx.scale(cam.zoom, cam.zoom);
-    ctx.translate(-cam.panX, -cam.panY);
-  }
+  ctx.fillStyle = '#090b10';
+  ctx.fillRect(0, 0, safeStageW, safeStageH);
+
+  const baseScale = Math.min(safeStageW / WORLD_WIDTH, safeStageH / WORLD_HEIGHT);
+  const cam = camera
+    ? clampCamera2D(camera, WORLD_WIDTH, WORLD_HEIGHT)
+    : { zoom: 1.0, panX: WORLD_WIDTH / 2, panY: WORLD_HEIGHT / 2 };
+  const effectiveScale = baseScale * cam.zoom;
+
+  ctx.translate(safeStageW / 2, safeStageH / 2);
+  ctx.scale(effectiveScale, effectiveScale);
+  ctx.translate(-cam.panX, -cam.panY);
+
+  ctx.beginPath();
+  ctx.rect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
+  ctx.clip();
 
   if (state.room === 'inside') {
     renderInsideRoom(ctx, state, time, hoveredStationId, hoveredMiata);

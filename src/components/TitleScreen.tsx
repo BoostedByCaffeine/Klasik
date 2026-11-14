@@ -166,8 +166,8 @@ interface BootScreenProps {
 
 /**
  * Centered GBA Boot / Loading Screen with an animated pixel espresso cup filling up,
- * a stepped pixel progress bar (0% to 100%), and an inline studio credit, automatically
- * transitioning to the Title Screen after 1.5 seconds.
+ * a stepped pixel progress bar (0% to 100%), an offline cold-start initialization skeleton
+ * checklist, and an inline studio credit, automatically transitioning to the Title Screen.
  */
 export const BootLoadingScreen: React.FC<BootScreenProps> = ({ onComplete }) => {
   const [progress, setProgress] = useState(0);
@@ -196,21 +196,27 @@ export const BootLoadingScreen: React.FC<BootScreenProps> = ({ onComplete }) => 
 
   const fillHeight = Math.round((progress / 100) * 26);
 
+  const bootSubsystems = [
+    { label: 'OFFLINE PIXEL FONTS (WOFF2)', readyAt: 20 },
+    { label: 'CAFE SAVE LEDGER (V2)', readyAt: 50 },
+    { label: '1990 MIATA MX-5 & GARDEN ENGINE', readyAt: 80 },
+  ];
+
   return (
     <div
       data-testid="boot-loading-screen"
       onClick={onComplete}
-      className="fixed inset-0 z-50 bg-[#090b10] flex flex-col items-center justify-center p-4 select-none cursor-pointer"
+      className="fixed inset-0 z-50 bg-[#090b10] flex flex-col items-center justify-center p-3 select-none cursor-pointer"
     >
-      <div className="gba-frame px-6 py-5 max-w-xs w-full flex flex-col items-center gap-3.5 bg-[#12161f]">
+      <div className="gba-frame px-5 py-4 max-w-sm w-full flex flex-col items-center gap-3 bg-[#12161f]">
         <div className="text-[9px] font-['Silkscreen'] font-bold text-[#94a3b8] tracking-widest uppercase">
-          GBA CARTRIDGE BOOT
+          GBA CARTRIDGE COLD-START BOOT
         </div>
 
         {/* Animated Pixel Espresso Cup Filling Up */}
         <svg
           viewBox="0 0 80 68"
-          className="w-20 h-16"
+          className="w-16 h-14"
           role="img"
           aria-label="Animated Espresso Cup Filling"
         >
@@ -254,7 +260,7 @@ export const BootLoadingScreen: React.FC<BootScreenProps> = ({ onComplete }) => 
         </svg>
 
         {/* Stepped Pixel Progress Bar (0% to 100%) */}
-        <div className="w-full">
+        <div className="w-full" data-testid="boot-progress-bar">
           <div className="flex items-center justify-between text-[9px] font-['Silkscreen'] font-bold text-[#facc15] mb-1 tabular-nums">
             <span>BREWING ROM...</span>
             <span data-testid="boot-progress-pct">{progress}%</span>
@@ -274,13 +280,110 @@ export const BootLoadingScreen: React.FC<BootScreenProps> = ({ onComplete }) => 
           </div>
         </div>
 
-        {/* Inline Studio Logo */}
+        {/* Cold-Start Skeleton Status Checklist */}
+        <div
+          data-testid="boot-skeleton-status"
+          className="w-full bg-[#090b0e] border border-[#334155] px-2.5 py-1.5 flex flex-col gap-1"
+        >
+          {bootSubsystems.map((sys) => {
+            const ready = progress >= sys.readyAt;
+            return (
+              <div
+                key={sys.label}
+                className="flex items-center justify-between text-[8px] font-['Silkscreen']"
+              >
+                <span className={ready ? 'text-[#e2e8f0]' : 'text-[#64748b]'}>
+                  {sys.label}
+                </span>
+                <span
+                  className={`font-bold ${
+                    ready ? 'text-[#4ade80]' : 'text-[#facc15] animate-pulse'
+                  }`}
+                >
+                  {ready ? '✓ READY' : 'LOADING'}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Inline Studio Credit Footer */}
         <div
           data-testid="boot-studio-logo"
-          className="pt-1 flex items-center justify-center w-full"
+          className="pt-1 flex items-center justify-center gap-2 w-full"
         >
-          <StudioLogoSvg className="h-9 w-auto object-contain" />
+          <span className="text-[9px] font-['Silkscreen'] font-bold text-[#94a3b8]">
+            By
+          </span>
+          <StudioLogoSvg className="h-8 w-auto object-contain" />
         </div>
+      </div>
+    </div>
+  );
+};
+
+interface RotateLandscapeOverlayProps {
+  onDismiss?: () => void;
+}
+
+/**
+ * Full-Screen GBA Pixel Orientation Prompt shown when a mobile/touch device is held in portrait.
+ */
+export const RotateLandscapeOverlay: React.FC<RotateLandscapeOverlayProps> = ({
+  onDismiss,
+}) => {
+  return (
+    <div
+      data-testid="rotate-landscape-overlay"
+      className="fixed inset-0 z-[90] bg-[#090b10]/96 flex flex-col items-center justify-center p-5 select-none text-center"
+    >
+      <div className="gba-frame max-w-sm w-full px-5 py-5 bg-[#12161f] flex flex-col items-center gap-3.5">
+        {/* Top Black-and-White Awning Trim */}
+        <div className="w-full h-3 flex border-b-2 border-[#facc15] overflow-hidden">
+          {Array.from({ length: 12 }).map((_, i) => (
+            <div
+              key={i}
+              className={`flex-1 h-full ${i % 2 === 0 ? 'bg-[#f8fafc]' : 'bg-[#090b0e]'}`}
+            />
+          ))}
+        </div>
+
+        {/* Animated Pixel Phone Rotating to Landscape */}
+        <div className="w-16 h-16 bg-[#090b0e] border-2 border-[#facc15] flex items-center justify-center">
+          <svg
+            viewBox="0 0 48 48"
+            className="w-11 h-11 animate-pulse"
+            role="img"
+            aria-label="Rotate Device to Landscape"
+          >
+            {/* Landscape Phone Silhouette */}
+            <rect x="6" y="14" width="36" height="20" fill="#1e293b" stroke="#f8fafc" strokeWidth="2" />
+            <rect x="10" y="17" width="26" height="14" fill="#dc2626" />
+            <rect x="38" y="21" width="2" height="6" fill="#facc15" />
+            {/* Rotation Arrows */}
+            <path d="M18 8 H30 L27 5 M30 8 L27 11" stroke="#facc15" strokeWidth="2" fill="none" />
+            <path d="M30 40 H18 L21 37 M18 40 L21 43" stroke="#facc15" strokeWidth="2" fill="none" />
+          </svg>
+        </div>
+
+        <h2 className="text-xs sm:text-sm font-['Press_Start_2P'] text-[#facc15] leading-relaxed">
+          ↻ ROTATE DEVICE TO LANDSCAPE
+        </h2>
+
+        <p className="text-base font-['VT323'] text-[#e2e8f0] leading-snug">
+          Klasik — Garage Garden Cafe plays best in landscape view
+        </p>
+
+        {onDismiss && (
+          <button
+            type="button"
+            data-testid="dismiss-rotate-overlay-btn"
+            onClick={onDismiss}
+            className="gba-btn px-3 py-1.5 text-[9px] text-[#94a3b8] hover:text-[#f8fafc] cursor-pointer mt-1"
+          >
+            CONTINUE IN CURRENT VIEW
+          </button>
+        )}
       </div>
     </div>
   );
@@ -294,7 +397,8 @@ interface TitleScreenProps {
 }
 
 /**
- * Minimalist Title Screen (No Paragraph Text) designed to never clip in mobile landscape (`100dvh`) or portrait.
+ * Redesigned Landscape-Safe GBA Arcade Title Screen (`src/components/TitleScreen.tsx`)
+ * over the live animated cafe & 1990 Mazda Miata MX-5 garage canvas.
  */
 export const TitleScreen: React.FC<TitleScreenProps> = ({
   onStart,
@@ -305,74 +409,107 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
   return (
     <div
       data-testid="title-screen"
-      className="fixed inset-0 z-20 flex items-center justify-center p-3 pointer-events-none"
+      className="fixed inset-0 z-20 flex items-center justify-center p-2.5 pointer-events-none"
       style={{
-        background:
-          'radial-gradient(circle at center, rgba(9, 11, 16, 0.78) 0%, rgba(9, 11, 16, 0.94) 100%)',
+        backgroundColor: 'rgba(7, 9, 14, 0.72)',
       }}
     >
-      <div className="gba-frame pointer-events-auto w-full max-w-lg px-5 py-4 flex flex-col items-center text-center gap-3 bg-[#12161f]">
-        {/* 1. Main Title: KLASIK */}
-        <h1 className="text-3xl sm:text-4xl font-['Press_Start_2P'] text-[#f8fafc] tracking-wider drop-shadow-[0_4px_0_#090b0e]">
-          KLASIK
-        </h1>
-
-        {/* 2. Subtitle: Garage Garden Cafe */}
-        <p className="text-xs sm:text-sm font-['Silkscreen'] font-bold text-[#facc15] tracking-wide">
-          Garage Garden Cafe
-        </p>
-
-        {/* 3. Action Buttons: ► START SHIFT, 👤 CUSTOMIZE, and (Web Browser only) 📲 INSTALL APP */}
-        <div className="flex flex-wrap items-center justify-center gap-2.5 pt-1 w-full">
-          <button
-            type="button"
-            data-start="true"
-            onClick={(e) => {
-              e.currentTarget.blur();
-              onStart();
-            }}
-            className="gba-btn gba-btn-active min-h-[44px] sm:min-h-[38px] px-4 py-2.5 text-[10px] sm:text-xs cursor-pointer whitespace-nowrap shrink-0 flex items-center justify-center"
-          >
-            ► START SHIFT
-          </button>
-
-          <button
-            type="button"
-            data-testid="title-customize-btn"
-            onClick={(e) => {
-              e.currentTarget.blur();
-              onOpenCustomize();
-            }}
-            className="gba-btn min-h-[44px] sm:min-h-[38px] px-3.5 py-2.5 text-[10px] sm:text-xs text-[#7dd3fc] cursor-pointer whitespace-nowrap shrink-0 flex items-center justify-center"
-          >
-            👤 CUSTOMIZE
-          </button>
-
-          {!isStandalone && (
-            <button
-              type="button"
-              data-testid="title-install-app-btn"
-              onClick={(e) => {
-                e.currentTarget.blur();
-                onInstallApp();
-              }}
-              className="gba-btn min-h-[44px] sm:min-h-[38px] px-3.5 py-2.5 text-[10px] sm:text-xs text-[#4ade80] cursor-pointer whitespace-nowrap shrink-0 flex items-center justify-center"
-            >
-              📲 INSTALL APP
-            </button>
-          )}
+      <div className="gba-frame pointer-events-auto w-full max-w-lg overflow-hidden flex flex-col items-center text-center bg-[#12161f]">
+        {/* 1. Top Black-and-White Striped Cafe Awning Bar with Gold Pixel Trim */}
+        <div className="w-full">
+          <div className="w-full h-3.5 flex">
+            {Array.from({ length: 16 }).map((_, idx) => (
+              <div
+                key={idx}
+                className={`flex-1 h-full ${
+                  idx % 2 === 0 ? 'bg-[#f8fafc]' : 'bg-[#090b0e]'
+                }`}
+              />
+            ))}
+          </div>
+          <div className="w-full h-1 bg-[#facc15]" />
         </div>
 
-        {/* 4. Bottom Inline Studio Logo Slot */}
-        <div
-          id="studio-logo-slot"
-          data-testid="studio-logo-slot"
-          className="pt-2.5 border-t-2 border-[#262f40] w-full flex items-center justify-center"
-        >
-          <StudioLogoSvg className="h-10 sm:h-11 w-auto object-contain" />
+        <div className="w-full px-5 py-3.5 flex flex-col items-center gap-2.5">
+          {/* Pixel Daisy & 1990 Miata Red Badge Strip */}
+          <div className="flex items-center justify-center gap-2 text-[9px] font-['Silkscreen'] font-bold text-[#cbd5e1]">
+            <span className="text-[#facc15]">✿</span>
+            <span>EST. 1990 · MX-5 GARAGE &amp; ESPRESSO BAR</span>
+            <span className="text-[#facc15]">✿</span>
+          </div>
+
+          {/* 2. Main Title: KLASIK in 'Press Start 2P' (32px desktop / 24px mobile landscape) */}
+          <h1
+            className="text-[24px] sm:text-[32px] leading-none font-['Press_Start_2P'] text-[#f8fafc] tracking-wider"
+            style={{ textShadow: '0 4px 0 #090b0e, 2px 2px 0 #dc2626' }}
+          >
+            KLASIK
+          </h1>
+
+          {/* 3. Subtitle Pill: Garage Garden Cafe in 'Silkscreen' (12px, #facc15 on #090b0e stepped pixel border) */}
+          <div className="px-3.5 py-1 bg-[#090b0e] border-2 border-[#facc15] shadow-[0_2px_0_#000000]">
+            <p className="text-[12px] font-['Silkscreen'] font-bold text-[#facc15] tracking-wide">
+              Garage Garden Cafe
+            </p>
+          </div>
+
+          {/* 4. Horizontal GBA Button Row: ► START SHIFT, 👤 CUSTOMIZE, and conditional 📲 INSTALL APP */}
+          <div className="flex flex-wrap items-center justify-center gap-2.5 pt-1 w-full">
+            <button
+              type="button"
+              data-start="true"
+              onClick={(e) => {
+                e.currentTarget.blur();
+                onStart();
+              }}
+              className="gba-btn gba-btn-active min-h-[42px] sm:min-h-[38px] px-4 py-2 text-[10px] sm:text-xs font-bold cursor-pointer whitespace-nowrap shrink-0 flex items-center justify-center"
+            >
+              ► START SHIFT
+            </button>
+
+            <button
+              type="button"
+              data-testid="title-customize-btn"
+              onClick={(e) => {
+                e.currentTarget.blur();
+                onOpenCustomize();
+              }}
+              className="gba-btn min-h-[42px] sm:min-h-[38px] px-3.5 py-2 text-[10px] sm:text-xs font-bold text-[#7dd3fc] cursor-pointer whitespace-nowrap shrink-0 flex items-center justify-center"
+            >
+              👤 CUSTOMIZE
+            </button>
+
+            {!isStandalone && (
+              <button
+                type="button"
+                data-testid="title-install-app-btn"
+                onClick={(e) => {
+                  e.currentTarget.blur();
+                  onInstallApp();
+                }}
+                className="gba-btn min-h-[42px] sm:min-h-[38px] px-3.5 py-2 text-[10px] sm:text-xs font-bold text-[#4ade80] cursor-pointer whitespace-nowrap shrink-0 flex items-center justify-center"
+              >
+                📲 INSTALL APP
+              </button>
+            )}
+          </div>
+
+          {/* 5. Bottom Studio Credit Footer displaying "By" immediately before Boosted By Caffeine logo */}
+          <div
+            id="studio-logo-slot"
+            data-testid="studio-logo-slot"
+            className="pt-2.5 mt-0.5 border-t-2 border-[#262f40] w-full flex items-center justify-center gap-2"
+          >
+            <span
+              data-testid="studio-credit-by"
+              className="text-[10px] font-['Silkscreen'] font-bold text-[#94a3b8] tracking-wider"
+            >
+              By
+            </span>
+            <StudioLogoSvg className="h-9 sm:h-10 w-auto object-contain" />
+          </div>
         </div>
       </div>
     </div>
   );
 };
-

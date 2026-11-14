@@ -92,18 +92,12 @@ test('customer dialogue bubble emotes spawn randomized emotes based on patience 
   assert.ok((serveRes.customer!.emoteTimer ?? 0) >= 2.0);
 });
 
-test('2D pinch-to-zoom & pan camera clamps bounds, auto-zooms in portrait, and inverts world coordinates', () => {
-  // Portrait viewport defaults to 1.55x zoom centered on active room focus area
-  const portraitInside = getDefaultCameraForViewport(390, 844, 'inside');
-  assert.equal(portraitInside.zoom, 1.55);
-  assert.equal(portraitInside.panX, 296);
-  assert.equal(portraitInside.panY, 220);
-
-  // Landscape viewport defaults to 1.0x overview
-  const landscapeInside = getDefaultCameraForViewport(844, 390, 'inside');
-  assert.equal(landscapeInside.zoom, 1.0);
-  assert.equal(landscapeInside.panX, 450);
-  assert.equal(landscapeInside.panY, 240);
+test('2D pinch-to-zoom & pan camera clamps bounds, defaults to landscape 1.0x overview, and inverts full-stage world coordinates', () => {
+  // Default viewport camera is landscape-first 1.0x overview centered at (450, 240)
+  const defaultInside = getDefaultCameraForViewport(844, 390, 'inside');
+  assert.equal(defaultInside.zoom, 1.0);
+  assert.equal(defaultInside.panX, 450);
+  assert.equal(defaultInside.panY, 240);
 
   // Clamping camera keeps pan within world bounds
   const clamped = clampCamera2D({ zoom: 2.0, panX: 50, panY: 20 }, 900, 480);
@@ -111,11 +105,11 @@ test('2D pinch-to-zoom & pan camera clamps bounds, auto-zooms in portrait, and i
   assert.equal(clamped.panX, 225); // halfViewW = 900 / 4 = 225
   assert.equal(clamped.panY, 120); // halfViewH = 480 / 4 = 120
 
-  // screenToWorldContain inverts zoom & pan accurately
-  const rect = { left: 0, top: 0, width: 900, height: 480 };
+  // screenToWorldContain inverts zoom & pan accurately across full-stage viewports
+  const rect = { left: 0, top: 0, width: 1200, height: 480 };
   const cam = { zoom: 2.0, panX: 300, panY: 200 };
-  // Clicking exact center of canvas (450, 240) maps to (panX, panY) = (300, 200)
-  const worldCenter = screenToWorldContain(450, 240, rect, 900, 480, cam);
+  // Clicking exact center of full-stage canvas (600, 240) maps to (panX, panY) = (300, 200)
+  const worldCenter = screenToWorldContain(600, 240, rect, 900, 480, cam);
   assert.equal(Math.round(worldCenter.x), 300);
   assert.equal(Math.round(worldCenter.y), 200);
 });

@@ -171,6 +171,24 @@ export function isStandaloneApp(): boolean {
 }
 
 /**
+ * Requests landscape orientation lock on supported mobile browsers, installed PWAs, and Android TWAs.
+ */
+export function tryLockLandscapeOrientation(): void {
+  try {
+    if (typeof screen !== 'undefined' && screen.orientation) {
+      const orient = screen.orientation as unknown as {
+        lock?: (mode: string) => Promise<void>;
+      };
+      if (typeof orient.lock === 'function') {
+        void orient.lock('landscape').catch(() => {});
+      }
+    }
+  } catch {
+    // Ignore unsupported orientation lock environments
+  }
+}
+
+/**
  * Attaches an inline Blob Web App Manifest (with absolute start_url & scope so Blob URLs never error)
  * and safely registers `./sw.js` only if it exists on the server, purging stale legacy caches.
  */
@@ -181,6 +199,8 @@ export async function initKlasikPwa(): Promise<{
   if (typeof window === 'undefined' || typeof document === 'undefined') {
     return { swRegistered: false, manifestAttached: false };
   }
+
+  tryLockLandscapeOrientation();
 
   let manifestAttached = false;
   try {

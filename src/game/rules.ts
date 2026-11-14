@@ -1502,20 +1502,13 @@ export function clampCamera2D(
 }
 
 export function getDefaultCameraForViewport(
-  viewportW: number,
-  viewportH: number,
-  room: RoomId = 'inside',
+  _viewportW: number,
+  _viewportH: number,
+  _room: RoomId = 'inside',
   worldW = 900,
   worldH = 480
 ): Camera2D {
-  const isPortrait = viewportH > viewportW;
-  if (!isPortrait) {
-    return { zoom: 1.0, panX: worldW / 2, panY: worldH / 2 };
-  }
-  // Portrait smart auto-zoom (1.55x) centered on Espresso Bar & Counter (inside) or Well & Daisy Beds (garden)
-  const focusX = room === 'inside' ? 296 : 450;
-  const focusY = room === 'inside' ? 220 : 254;
-  return clampCamera2D({ zoom: 1.55, panX: focusX, panY: focusY }, worldW, worldH);
+  return { zoom: 1.0, panX: worldW / 2, panY: worldH / 2 };
 }
 
 export function screenToWorldContain(
@@ -1527,31 +1520,22 @@ export function screenToWorldContain(
   camera?: Camera2D
 ): { x: number; y: number } {
   if (rect.width <= 0 || rect.height <= 0) return { x: 0, y: 0 };
-  const scale = Math.min(rect.width / worldW, rect.height / worldH);
-  const renderedW = worldW * scale;
-  const renderedH = worldH * scale;
-  const offsetX = (rect.width - renderedW) / 2;
-  const offsetY = (rect.height - renderedH) / 2;
+  const baseScale = Math.min(rect.width / worldW, rect.height / worldH);
+  const clampedCam = camera
+    ? clampCamera2D(camera, worldW, worldH)
+    : { zoom: 1.0, panX: worldW / 2, panY: worldH / 2 };
+  const effectiveScale = baseScale * clampedCam.zoom;
 
-  const localX = clientX - rect.left - offsetX;
-  const localY = clientY - rect.top - offsetY;
+  const localX = clientX - rect.left;
+  const localY = clientY - rect.top;
 
-  const canvasX = (localX / renderedW) * worldW;
-  const canvasY = (localY / renderedH) * worldH;
+  const invertedX = (localX - rect.width / 2) / effectiveScale + clampedCam.panX;
+  const invertedY = (localY - rect.height / 2) / effectiveScale + clampedCam.panY;
 
-  if (camera && camera.zoom > 1.001) {
-    const clampedCam = clampCamera2D(camera, worldW, worldH);
-    const invertedX = (canvasX - worldW / 2) / clampedCam.zoom + clampedCam.panX;
-    const invertedY = (canvasY - worldH / 2) / clampedCam.zoom + clampedCam.panY;
-    return {
-      x: Math.max(0, Math.min(worldW, invertedX)),
-      y: Math.max(0, Math.min(worldH, invertedY)),
-    };
-  }
-
-  const worldX = Math.max(0, Math.min(worldW, canvasX));
-  const worldY = Math.max(0, Math.min(worldH, canvasY));
-  return { x: worldX, y: worldY };
+  return {
+    x: Math.max(0, Math.min(worldW, invertedX)),
+    y: Math.max(0, Math.min(worldH, invertedY)),
+  };
 }
 
 export function spawnPopup(

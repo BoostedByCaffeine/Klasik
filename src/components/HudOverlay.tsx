@@ -1,9 +1,9 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { Flame } from 'lucide-react';
+import React, { useState } from 'react';
 import {
   DrinkId,
   RECIPES,
   StationId,
+  STATIONS,
   RoomId,
   TimeOfDay,
   WeatherType,
@@ -15,7 +15,6 @@ import {
   StationTier,
   DecorItemId,
 } from '../game/rules';
-import { DailyGoalProgressBar } from './DailyGoalProgressBar';
 
 export interface HudSnapshot {
   cozyRating: number;
@@ -55,14 +54,12 @@ export interface HudSnapshot {
   decorEquipped: Record<DecorItemId, boolean>;
 }
 
-interface TopHudBarProps {
+interface TopHudProps {
   hud: HudSnapshot;
   dockCollapsed: boolean;
   isStandalone?: boolean;
   isFullscreen?: boolean;
   cameraZoom?: number;
-  onZoomIn?: () => void;
-  onZoomOut?: () => void;
   onResetZoom?: () => void;
   onToggleFullscreen?: () => void;
   onToggleDock: () => void;
@@ -73,8 +70,8 @@ interface TopHudBarProps {
   onCycleWeather: () => void;
   onHireStaff: () => void;
   onOpenCustomize: () => void;
-  onOpenBizModal: () => void;
   onOpenMenuModal: () => void;
+  onOpenBizModal: () => void;
   onOpenPwaModal: () => void;
   onPause: () => void;
   onRestart: () => void;
@@ -82,14 +79,12 @@ interface TopHudBarProps {
   onFinishShift: () => void;
 }
 
-export const TopHudBar: React.FC<TopHudBarProps> = ({
+export const TopHudBar: React.FC<TopHudProps> = ({
   hud,
   dockCollapsed,
   isStandalone = false,
   isFullscreen = false,
   cameraZoom = 1,
-  onZoomIn,
-  onZoomOut,
   onResetZoom,
   onToggleFullscreen,
   onToggleDock,
@@ -98,646 +93,358 @@ export const TopHudBar: React.FC<TopHudBarProps> = ({
   onToggleRoom,
   onCycleTimeOfDay,
   onCycleWeather,
-  onHireStaff,
   onOpenCustomize,
-  onOpenBizModal,
   onOpenMenuModal,
+  onOpenBizModal,
   onOpenPwaModal,
   onPause,
   onRestart,
   onOpenCodeModal,
   onFinishShift,
 }) => {
-  const orderRecipe = hud.waitingCustomerOrder ? RECIPES[hud.waitingCustomerOrder] : null;
-  const [moreDrawerOpen, setMoreDrawerOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
 
-  const roomLabels: Record<RoomId, string> = {
-    inside: '🚪 INSIDE',
-    garden: '🚪 GARDEN',
-  };
+  const timeIcon =
+    hud.timeOfDay === 'day' ? '☀' : hud.timeOfDay === 'sunset' ? '🌅' : '🌙';
+  const weatherIcon =
+    hud.weather === 'clear' ? '☀' : hud.weather === 'breeze' ? '🍃' : '🌧';
+  const totalStock = hud.finance.ingredientStock;
+  const stockLow = totalStock <= 3;
 
-  const timeLabels: Record<TimeOfDay, string> = {
-    day: '☀️ DAY',
-    sunset: '🌅 SUNSET',
-    night: '🌙 NIGHT',
-  };
-
-  const weatherLabels: Record<WeatherType, string> = {
-    clear: '⛅ CLEAR',
-    breeze: '🍃 BREEZE',
-    rain: '🌧️ RAIN',
-  };
-
-  const canAffordStaff = hud.nextStaffCost !== null && hud.coins >= hud.nextStaffCost;
+  const goalCompleted = hud.servedCount >= hud.dailyTarget;
   const zoomPct = Math.round(cameraZoom * 100);
 
-  const prevStreakRef = useRef(hud.dailyStreak);
-  const pulseTimerRef = useRef<number | null>(null);
-  const [isFlamePulsing, setIsFlamePulsing] = useState(false);
-  const [flamePulseKey, setFlamePulseKey] = useState(0);
-
-  useEffect(() => {
-    if (hud.dailyStreak > prevStreakRef.current) {
-      setFlamePulseKey((k) => k + 1);
-      setIsFlamePulsing(true);
-      if (pulseTimerRef.current !== null) {
-        window.clearTimeout(pulseTimerRef.current);
-      }
-      pulseTimerRef.current = window.setTimeout(() => {
-        setIsFlamePulsing(false);
-        pulseTimerRef.current = null;
-      }, 2300);
-    }
-    prevStreakRef.current = hud.dailyStreak;
-  }, [hud.dailyStreak]);
-
-  useEffect(() => {
-    return () => {
-      if (pulseTimerRef.current !== null) {
-        window.clearTimeout(pulseTimerRef.current);
-      }
-    };
-  }, []);
-
   return (
-    <header className="klasik-top-hud relative z-30 w-full bg-[#090b10] border-b-[3px] border-[#f8fafc] px-1.5 sm:px-2 py-1 shrink-0 flex flex-wrap items-center justify-between gap-1 sm:gap-1.5">
-      {/* Compact GBA Stat Strip + Daily Goal Progress Bar (Wraps cleanly on narrow portrait screens < 640px) */}
-      <div className="gba-frame px-1.5 sm:px-2 py-0.5 flex flex-wrap items-center gap-1 sm:gap-1.5 max-w-full">
-        {/* Live Real-Time Clock */}
-        <div className="flex items-center gap-0.5">
-          <span
-            data-testid="hud-real-clock"
-            className="text-[7px] sm:text-[8px] font-['Press_Start_2P'] text-[#7dd3fc] tabular-nums whitespace-nowrap"
+    <header className="relative z-30 w-full shrink-0 bg-[#12161f] border-b-[3px] border-[#f8fafc] shadow-[0_3px_0_#090b0e]">
+      {/* Single-Row Slim Top HUD (32px height in mobile landscape, flex-nowrap) */}
+      <div className="w-full min-h-[32px] px-1.5 py-0.5 flex items-center justify-between gap-1.5 flex-nowrap overflow-x-auto no-scrollbar">
+        {/* Left: Compact Inline Stat Strip including GOAL 0/6 */}
+        <div className="flex items-center gap-1 shrink-0 flex-nowrap">
+          <div
+            data-testid="hud-clock-badge"
+            className="px-1.5 py-0.5 bg-[#090b0e] border border-[#334155] flex items-center gap-1"
+            title="Real-Time Local Clock & Environment"
           >
-            🕒 {hud.realClock}
-          </span>
-        </div>
-
-        <div className="w-[2px] h-3 bg-[#334155]" />
-
-        {/* Barista Name Badge */}
-        <div className="flex items-center gap-0.5">
-          <span
-            data-testid="hud-barista-name"
-            className="text-[7px] sm:text-[8px] font-['Press_Start_2P'] text-[#fde047] whitespace-nowrap"
-          >
-            👤 {hud.appearance.name.toUpperCase()}
-          </span>
-        </div>
-
-        <div className="w-[2px] h-3 bg-[#334155]" />
-
-        {/* Cozy Rating */}
-        <div className="flex items-center gap-0.5">
-          <span className="text-[6px] sm:text-[7px] font-['Press_Start_2P'] text-[#94a3b8]">COZY</span>
-          <span
-            data-testid="hud-cozy-rating"
-            className="text-[9px] sm:text-[10px] font-['Press_Start_2P'] text-[#f8fafc] tabular-nums"
-          >
-            {Math.round(hud.cozyRating)}%
-          </span>
-        </div>
-
-        <div className="w-[2px] h-3 bg-[#334155]" />
-
-        {/* Hearts */}
-        <div className="flex items-center gap-0.5">
-          <span className="text-[8px] font-['Press_Start_2P'] text-[#fb7185]">♥</span>
-          <span
-            data-testid="hud-hearts"
-            className="text-[9px] sm:text-[10px] font-['Press_Start_2P'] text-[#fb7185] tabular-nums"
-          >
-            {Math.round(hud.hearts)}
-          </span>
-        </div>
-
-        <div className="w-[2px] h-3 bg-[#334155]" />
-
-        {/* Coins */}
-        <div className="flex items-center gap-0.5">
-          <span className="text-[8px] font-['Press_Start_2P'] text-[#facc15]">$</span>
-          <span
-            data-testid="hud-coins"
-            className="text-[9px] sm:text-[10px] font-['Press_Start_2P'] text-[#facc15] tabular-nums"
-          >
-            {Math.round(hud.coins)}
-          </span>
-        </div>
-
-        <div className="w-[2px] h-3 bg-[#334155]" />
-
-        {/* Ingredient Stock Readout */}
-        <div className="flex items-center gap-0.5">
-          <span className="text-[6px] sm:text-[7px] font-['Press_Start_2P'] text-[#94a3b8]">STK</span>
-          <span
-            data-testid="hud-stock"
-            className={`text-[9px] sm:text-[10px] font-['Press_Start_2P'] tabular-nums ${
-              hud.finance.ingredientStock > 0 ? 'text-[#4ade80]' : 'text-[#fb7185]'
-            }`}
-          >
-            {hud.finance.ingredientStock}
-          </span>
-        </div>
-
-        <div className="w-[2px] h-3 bg-[#334155]" />
-
-        {/* Daily Streak Counter with Flame Icon */}
-        <div
-          data-testid="hud-daily-streak"
-          className="flex items-center gap-0.5"
-          aria-label={`Daily Streak ${hud.dailyStreak}`}
-        >
-          <Flame
-            key={isFlamePulsing ? `pulse-${flamePulseKey}` : 'idle'}
-            data-testid="hud-streak-flame"
-            data-animating={isFlamePulsing ? 'true' : 'false'}
-            className={`w-3.5 h-3.5 shrink-0 ${
-              hud.dailyStreak > 0 ? 'text-[#fb923c]' : 'text-[#64748b]'
-            } ${isFlamePulsing ? 'klasik-flame-pulse' : ''}`}
-            fill={hud.dailyStreak > 0 ? '#f97316' : 'none'}
-            strokeWidth={2.25}
-          />
-          <span className="text-[7px] font-['Press_Start_2P'] text-[#94a3b8] hidden md:inline">
-            STREAK
-          </span>
-          <span
-            data-testid="hud-streak-count"
-            className={`text-[9px] sm:text-[10px] font-['Press_Start_2P'] tabular-nums ${
-              hud.dailyStreak > 0 ? 'text-[#fdba74]' : 'text-[#94a3b8]'
-            }`}
-          >
-            {Math.round(hud.dailyStreak)}
-          </span>
-        </div>
-
-        <div className="w-[2px] h-3 bg-[#334155]" />
-
-        {/* Daily Goal Progress Bar Component */}
-        <DailyGoalProgressBar
-          servedCount={hud.servedCount}
-          dailyTarget={hud.dailyTarget}
-          onFinishShift={onFinishShift}
-        />
-      </div>
-
-      {/* Center Classic Pokémon GBA White/Charcoal Dialogue & Recipe Guide Box */}
-      <div className="gba-dialogue-box px-2.5 py-0.5 flex-1 min-w-[180px] max-w-md hidden xl:flex items-center justify-between gap-2">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="text-[8px] font-['Press_Start_2P'] text-[#0f172a] uppercase truncate">
-              {orderRecipe
-                ? `${hud.appearance.name.toUpperCase()} -> ${hud.waitingCustomerName}: ${orderRecipe.name}`
-                : `${hud.appearance.name.toUpperCase()}'S BAR LOG`}
+            <span className="text-[9px] text-[#38bdf8] font-bold">
+              {timeIcon}
             </span>
-            <span className="text-[8px] font-['Press_Start_2P'] px-1.5 py-0.5 bg-[#0f172a] text-[#facc15] tabular-nums">
-              STEP {Math.round(hud.currentStepIndex)}/3
+            <span className="text-[9px] font-bold text-[#f8fafc] tabular-nums">
+              {hud.realClock}
             </span>
-            {hud.speedBoostActive && (
-              <span className="text-[8px] font-['Press_Start_2P'] px-1.5 py-0.5 bg-[#16a34a] text-[#ffffff]">
-                CAT BOOST!
+          </div>
+
+          <button
+            type="button"
+            data-testid="hud-hero-badge"
+            onClick={onOpenCustomize}
+            className="px-1.5 py-0.5 bg-[#090b0e] border border-[#38bdf8] flex items-center gap-1 cursor-pointer hover:bg-[#1e293b]"
+            title="Customize Barista"
+          >
+            <span className="text-[9px] font-bold text-[#7dd3fc] uppercase">
+              👤 {hud.appearance.name}
+            </span>
+          </button>
+
+          <div
+            data-testid="hud-cozy-badge"
+            className="px-1.5 py-0.5 bg-[#090b0e] border border-[#334155] flex items-center gap-1"
+            title="Garden & Cafe Cozy Rating"
+          >
+            <span className="text-[8px] text-[#94a3b8] hidden md:inline">COZY</span>
+            <span className="text-[9px] font-bold text-[#4ade80] tabular-nums">
+              {hud.cozyRating}%
+            </span>
+          </div>
+
+          <div
+            data-testid="hud-hearts-badge"
+            className="px-1.5 py-0.5 bg-[#090b0e] border border-[#334155] flex items-center gap-0.5"
+            title="Customer Hearts"
+          >
+            <span className="text-[9px] text-[#fb7185]">♥</span>
+            <span className="text-[9px] font-bold text-[#fda4af] tabular-nums">
+              {hud.hearts}
+            </span>
+          </div>
+
+          <button
+            type="button"
+            data-testid="hud-coins-badge"
+            onClick={onOpenBizModal}
+            className="px-1.5 py-0.5 bg-[#090b0e] border border-[#facc15] flex items-center gap-0.5 cursor-pointer hover:bg-[#1e293b]"
+            title="Cash Balance & P&L Ledger"
+          >
+            <span className="text-[9px] text-[#facc15]">$</span>
+            <span className="text-[9px] font-bold text-[#fde047] tabular-nums">
+              {hud.coins.toFixed(0)}
+            </span>
+            {hud.tipJarCoins > 0 && (
+              <span className="text-[8px] text-[#4ade80] font-bold">
+                +{hud.tipJarCoins}
               </span>
             )}
+          </button>
+
+          <button
+            type="button"
+            data-testid="hud-stock-badge"
+            onClick={onOpenBizModal}
+            className={`px-1.5 py-0.5 bg-[#090b0e] border flex items-center gap-0.5 cursor-pointer ${
+              stockLow
+                ? 'border-[#f87171] text-[#fca5a5] animate-pulse'
+                : 'border-[#334155] text-[#cbd5e1]'
+            }`}
+            title={`Wholesale Ingredient Stock: ${totalStock} cups`}
+          >
+            <span className="text-[8px] text-[#94a3b8]">STK</span>
+            <span className="text-[9px] font-bold tabular-nums">{totalStock}</span>
+          </button>
+
+          {/* Inline Daily Goal Badge (GOAL 0/6) inside Top-Left Stat Strip */}
+          <div
+            data-testid="daily-goal-bar"
+            className={`px-1.5 py-0.5 bg-[#090b0e] border flex items-center gap-1 ${
+              goalCompleted ? 'border-[#4ade80]' : 'border-[#334155]'
+            }`}
+            title="Daily Shift Customer Goal"
+          >
+            <span className="text-[8px] font-bold text-[#94a3b8]">GOAL</span>
+            <span
+              data-testid="daily-goal-count"
+              className={`text-[9px] font-bold tabular-nums ${
+                goalCompleted ? 'text-[#4ade80]' : 'text-[#facc15]'
+              }`}
+            >
+              {hud.servedCount}/{hud.dailyTarget}
+            </span>
+            {goalCompleted && (
+              <button
+                type="button"
+                data-testid="finish-shift-btn"
+                onClick={onFinishShift}
+                className="px-1 py-0.2 bg-[#14532d] border border-[#4ade80] text-[8px] font-bold text-[#fef08a] cursor-pointer animate-pulse"
+              >
+                ★ END
+              </button>
+            )}
           </div>
-          <div className="text-base font-['VT323'] leading-none text-[#1e293b] truncate mt-0.5">
-            {hud.lastMessage}
+
+          <div
+            data-testid="hud-streak-badge"
+            className="px-1.5 py-0.5 bg-[#090b0e] border border-[#f59e0b]/70 hidden sm:flex items-center gap-0.5"
+            title="Daily Shift Completion Streak"
+          >
+            <span className="text-[9px] text-[#fbbf24]">🔥</span>
+            <span className="text-[9px] font-bold text-[#fde68a] tabular-nums">
+              {hud.dailyStreak}
+            </span>
           </div>
         </div>
-        <span
-          className="text-[10px] font-['Press_Start_2P'] text-[#ef4444] shrink-0"
-          aria-hidden="true"
-        >
-          ▼
-        </span>
-      </div>
 
-      {/* Right Action Bar + Collapsible Mobile [☰ MORE] GBA Grid Popover Drawer Trigger */}
-      <div className="gba-frame px-1.5 py-0.5 flex flex-wrap items-center gap-1 shrink-0">
-        {/* Character Customize Modal [👤 HERO] */}
-        <button
-          type="button"
-          tabIndex={-1}
-          data-testid="hud-customize-btn"
-          aria-label="Customize Barista Hero"
-          onClick={(e) => {
-            e.currentTarget.blur();
-            onOpenCustomize();
-          }}
-          className="gba-btn px-1.5 h-6 flex items-center justify-center text-[#fde047] cursor-pointer whitespace-nowrap"
-        >
-          <span className="text-[8px] sm:text-[9px]">👤 HERO</span>
-        </button>
-
-        {/* 1-Tap Recipe & Profit Margin Guide [📖 MENU] */}
-        <button
-          type="button"
-          tabIndex={-1}
-          data-testid="hud-menu-btn"
-          aria-label="Open Recipe and Profit Margin Guide"
-          onClick={(e) => {
-            e.currentTarget.blur();
-            onOpenMenuModal();
-          }}
-          className="gba-btn px-1.5 h-6 flex items-center justify-center text-[#7dd3fc] cursor-pointer whitespace-nowrap"
-        >
-          <span className="text-[8px] sm:text-[9px]">📖 MENU</span>
-        </button>
-
-        {/* Business Economics, Staff & Shop Modal [📊 BIZ & SHOP] */}
-        <button
-          type="button"
-          tabIndex={-1}
-          data-testid="hud-biz-btn"
-          aria-label="Open Business Economics, Staff and Shop Modal"
-          onClick={(e) => {
-            e.currentTarget.blur();
-            onOpenBizModal();
-          }}
-          className="gba-btn px-1.5 h-6 flex items-center justify-center text-[#4ade80] cursor-pointer whitespace-nowrap"
-        >
-          <span className="text-[8px] sm:text-[9px]">📊 BIZ</span>
-        </button>
-
-        {/* Offline PWA & Android APK Modal [📲 APP / APK] — Shown ONLY in Live Web Browser Mode (!isStandalone) */}
-        {!isStandalone && (
+        {/* Right: Primary Controls + [☰ MORE] GBA Popover Drawer Trigger */}
+        <div className="flex items-center gap-1 shrink-0 flex-nowrap">
           <button
             type="button"
-            tabIndex={-1}
-            data-testid="hud-pwa-btn"
-            aria-label="Open Offline PWA and Android APK Modal"
-            onClick={(e) => {
-              e.currentTarget.blur();
-              onOpenPwaModal();
-            }}
-            className="gba-btn px-1.5 h-6 hidden sm:flex items-center justify-center text-[#f87171] cursor-pointer whitespace-nowrap"
+            data-testid="customize-btn"
+            onClick={onOpenCustomize}
+            className="gba-btn px-1.5 py-0.5 text-[9px] text-[#7dd3fc] cursor-pointer whitespace-nowrap"
+            title="Customize Barista Appearance"
           >
-            <span className="text-[8px] sm:text-[9px]">📲 APP / APK</span>
+            👤 HERO
           </button>
-        )}
 
-        {/* Mobile Web Fullscreen Toggle [⛶] — Shown ONLY in Live Web Browser Mode (!isStandalone) */}
-        {!isStandalone && onToggleFullscreen && (
           <button
             type="button"
-            tabIndex={-1}
-            data-testid="hud-fullscreen-btn"
-            aria-label={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen Landscape View'}
-            title={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
-            onClick={(e) => {
-              e.currentTarget.blur();
-              onToggleFullscreen();
-            }}
-            className={`gba-btn px-1.5 h-6 flex items-center justify-center cursor-pointer whitespace-nowrap ${
-              isFullscreen ? 'gba-btn-active' : 'text-[#fde047]'
+            data-testid="menu-guide-btn"
+            onClick={onOpenMenuModal}
+            className="gba-btn px-1.5 py-0.5 text-[9px] text-[#fde047] cursor-pointer whitespace-nowrap"
+            title="4 Signature Recipes & Profit Guide"
+          >
+            📖 MENU
+          </button>
+
+          <button
+            type="button"
+            data-testid="biz-modal-btn"
+            onClick={onOpenBizModal}
+            className={`gba-btn px-1.5 py-0.5 text-[9px] cursor-pointer whitespace-nowrap ${
+              stockLow ? 'gba-btn-active animate-pulse' : 'text-[#4ade80]'
             }`}
+            title="Business Ledger, Stock, Staff, Machines & Decor [U]"
           >
-            <span className="text-[8px] sm:text-[9px]">[⛶]</span>
+            📊 BIZ
           </button>
-        )}
 
-        {/* Room Map Switcher [V] */}
-        <button
-          type="button"
-          tabIndex={-1}
-          data-testid="hud-room-btn"
-          aria-label="Switch Room Map (INSIDE / GARDEN) [V]"
-          onClick={(e) => {
-            e.currentTarget.blur();
-            onToggleRoom();
-          }}
-          className="gba-btn px-1.5 h-6 flex items-center justify-center text-[#7dd3fc] cursor-pointer whitespace-nowrap"
-        >
-          <span className="text-[8px]">{roomLabels[hud.room]}</span>
-        </button>
+          {/* [⛶] Fullscreen Toggle — Only in Web Browser Mode */}
+          {!isStandalone && onToggleFullscreen && (
+            <button
+              type="button"
+              data-testid="fullscreen-btn"
+              onClick={onToggleFullscreen}
+              className={`gba-btn px-1.5 py-0.5 text-[9px] cursor-pointer whitespace-nowrap ${
+                isFullscreen ? 'gba-btn-active' : 'text-[#e2e8f0]'
+              }`}
+              title="Toggle Fullscreen"
+            >
+              [⛶]
+            </button>
+          )}
 
-        {/* Time of Day Cycle [T] (Desktop inline, Mobile in ☰ MORE drawer) */}
-        <button
-          type="button"
-          tabIndex={-1}
-          data-testid="hud-time-btn"
-          aria-label="Cycle Time of Day (DAY / SUNSET / NIGHT) [T]"
-          onClick={(e) => {
-            e.currentTarget.blur();
-            onCycleTimeOfDay();
-          }}
-          className="gba-btn px-1.5 h-6 hidden xl:flex items-center justify-center text-[#fde047] cursor-pointer whitespace-nowrap"
-        >
-          <span className="text-[8px]">{timeLabels[hud.timeOfDay]}</span>
-        </button>
+          <button
+            type="button"
+            data-testid="room-toggle-btn"
+            onClick={onToggleRoom}
+            className={`gba-btn px-1.5 py-0.5 text-[9px] cursor-pointer whitespace-nowrap ${
+              hud.room === 'garden' ? 'gba-btn-active' : 'text-[#86efac]'
+            }`}
+            title="Switch Room [V]"
+          >
+            {hud.room === 'inside' ? '🚪 GARDEN' : '🚪 INSIDE'}
+          </button>
 
-        {/* Weather Cycle [G] (Desktop inline, Mobile in ☰ MORE drawer) */}
-        <button
-          type="button"
-          tabIndex={-1}
-          data-testid="hud-weather-btn"
-          aria-label="Cycle Weather (CLEAR / BREEZE / RAIN) [G]"
-          onClick={(e) => {
-            e.currentTarget.blur();
-            onCycleWeather();
-          }}
-          className={`gba-btn px-1.5 h-6 hidden xl:flex items-center justify-center cursor-pointer whitespace-nowrap ${
-            hud.weather === 'rain' ? 'gba-btn-active' : 'text-[#86efac]'
-          }`}
-        >
-          <span className="text-[8px]">{weatherLabels[hud.weather]}</span>
-        </button>
-
-        {/* Hire Cafe Staff [K] */}
-        <button
-          type="button"
-          tabIndex={-1}
-          data-testid="hud-hire-staff-btn"
-          aria-label="Hire Cafe Staff [K]"
-          onClick={(e) => {
-            e.currentTarget.blur();
-            onHireStaff();
-          }}
-          className={`gba-btn px-1.5 h-6 hidden lg:flex items-center justify-center cursor-pointer whitespace-nowrap ${
-            canAffordStaff ? 'gba-btn-active' : 'text-[#fb7185]'
-          }`}
-        >
-          <span className="text-[8px]">
-            👩‍🍳 HIRE STAFF ({hud.hiredStaffCount}/2)
-            {hud.nextStaffCost !== null ? ` · $${hud.nextStaffCost}` : ' ★'}
-          </span>
-        </button>
-
-        {/* Collapsible Bottom Action Dock Toggle [🛠️ STATIONS] */}
-        <button
-          type="button"
-          tabIndex={-1}
-          data-testid="hud-stations-toggle-btn"
-          aria-expanded={!dockCollapsed}
-          aria-label={dockCollapsed ? 'Open Stations Drawer' : 'Close Stations Drawer'}
-          onClick={(e) => {
-            e.currentTarget.blur();
-            onToggleDock();
-          }}
-          className={`gba-btn px-1.5 h-6 hidden lg:flex items-center justify-center cursor-pointer whitespace-nowrap ${
-            !dockCollapsed ? 'gba-btn-active' : 'text-[#facc15]'
-          }`}
-        >
-          <span className="text-[8px]">🛠️ STATIONS</span>
-        </button>
-
-        {/* 8-Bit Mono Chiptune BGM Toggle */}
-        <button
-          type="button"
-          tabIndex={-1}
-          aria-label={hud.bgmEnabled ? 'Mute 8-Bit BGM [B]' : 'Play 8-Bit BGM [B]'}
-          onClick={(e) => {
-            e.currentTarget.blur();
-            onToggleBgm();
-          }}
-          className={`gba-btn px-1.5 h-6 hidden xl:flex items-center justify-center cursor-pointer whitespace-nowrap ${
-            hud.bgmEnabled ? 'gba-btn-active' : ''
-          }`}
-        >
-          <span className="text-[8px]">♪ BGM:{hud.bgmEnabled ? 'ON' : 'OFF'}</span>
-        </button>
-
-        {/* SFX Toggle */}
-        <button
-          type="button"
-          tabIndex={-1}
-          aria-label={hud.muted ? 'Unmute SFX [M]' : 'Mute SFX [M]'}
-          onClick={(e) => {
-            e.currentTarget.blur();
-            onToggleMute();
-          }}
-          className="gba-btn px-1.5 h-6 hidden xl:flex items-center justify-center cursor-pointer whitespace-nowrap"
-        >
-          <span className="text-[8px]">🔊 SFX:{hud.muted ? 'OFF' : 'ON'}</span>
-        </button>
-
-        {/* Pause Button */}
-        <button
-          type="button"
-          tabIndex={-1}
-          aria-label="Pause Game [P]"
-          onClick={(e) => {
-            e.currentTarget.blur();
-            onPause();
-          }}
-          className="gba-btn w-6 h-6 hidden sm:flex items-center justify-center cursor-pointer"
-        >
-          <span className="text-[8px]">II</span>
-        </button>
-
-        {/* Collapsible Mobile & Desktop [☰ MORE] GBA Grid Popover Drawer Button */}
-        <button
-          type="button"
-          tabIndex={-1}
-          data-testid="hud-more-drawer-btn"
-          aria-expanded={moreDrawerOpen}
-          aria-label="Open More Controls Menu Drawer"
-          onClick={(e) => {
-            e.currentTarget.blur();
-            setMoreDrawerOpen((prev) => !prev);
-          }}
-          className={`gba-btn px-2 h-6 flex items-center justify-center cursor-pointer whitespace-nowrap ${
-            moreDrawerOpen ? 'gba-btn-active' : 'text-[#facc15]'
-          }`}
-        >
-          <span className="text-[8px] sm:text-[9px]">{moreDrawerOpen ? '✕ CLOSE' : '☰ MORE'}</span>
-        </button>
+          <button
+            type="button"
+            data-testid="more-menu-btn"
+            onClick={() => setMoreOpen((prev) => !prev)}
+            className={`gba-btn px-2 py-0.5 text-[9px] cursor-pointer whitespace-nowrap ${
+              moreOpen ? 'gba-btn-active' : 'text-[#f8fafc]'
+            }`}
+            title="Environment, Audio, Pause & Tools Drawer"
+          >
+            ☰ MORE
+          </button>
+        </div>
       </div>
 
-      {/* Collapsible Mobile [☰ MORE] GBA Grid Popover Drawer */}
-      {moreDrawerOpen && (
+      {/* GBA Grid Popover Drawer ([☰ MORE]) */}
+      {moreOpen && (
         <div
-          data-testid="hud-more-drawer"
-          className="gba-frame w-full mt-1 p-2.5 bg-[#12161f] border-2 border-[#facc15] shadow-2xl"
+          data-testid="more-popover-drawer"
+          className="absolute right-2 top-full mt-1 z-50 w-72 sm:w-80 gba-frame bg-[#12161f] p-2.5 shadow-2xl"
         >
-          <div className="flex items-center justify-between gap-2 pb-1.5 mb-2 border-b border-[#334155]">
-            <span className="text-[8px] font-['Press_Start_2P'] text-[#facc15]">
-              ☰ CAFE COMMAND DRAWER · PINCH OR TAP TO ZOOM ({zoomPct}%)
+          <div className="flex items-center justify-between pb-1.5 mb-2 border-b border-[#262f40]">
+            <span className="text-[9px] font-bold text-[#facc15]">
+              ⚙ CAFE CONTROLS &amp; TOOLS
             </span>
             <button
               type="button"
-              onClick={() => setMoreDrawerOpen(false)}
-              className="gba-btn px-2 py-0.5 text-[8px] text-[#f87171] cursor-pointer"
+              onClick={() => setMoreOpen(false)}
+              className="text-[9px] text-[#94a3b8] hover:text-[#f8fafc] cursor-pointer"
             >
-              ✕
+              [✕]
             </button>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-1.5">
+          <div className="grid grid-cols-2 gap-1.5">
             <button
               type="button"
-              data-testid="drawer-customize-btn"
-              onClick={() => {
-                setMoreDrawerOpen(false);
-                onOpenCustomize();
-              }}
-              className="gba-btn min-h-[42px] px-2 py-1.5 text-[8px] text-[#fde047] flex items-center justify-center cursor-pointer"
+              data-testid="time-cycle-btn"
+              onClick={onCycleTimeOfDay}
+              className="gba-btn px-2 py-1.5 text-[9px] text-[#fde047] cursor-pointer text-left truncate"
             >
-              👤 HERO CUSTOMIZE
+              {timeIcon} TIME: {hud.timeOfDay.toUpperCase()}
             </button>
 
             <button
               type="button"
-              data-testid="drawer-menu-btn"
-              onClick={() => {
-                setMoreDrawerOpen(false);
-                onOpenMenuModal();
-              }}
-              className="gba-btn min-h-[42px] px-2 py-1.5 text-[8px] text-[#7dd3fc] flex items-center justify-center cursor-pointer"
+              data-testid="weather-cycle-btn"
+              onClick={onCycleWeather}
+              className="gba-btn px-2 py-1.5 text-[9px] text-[#7dd3fc] cursor-pointer text-left truncate"
             >
-              📖 RECIPES &amp; MARGINS
+              {weatherIcon} WTHR: {hud.weather.toUpperCase()}
             </button>
 
             <button
               type="button"
-              data-testid="drawer-biz-btn"
-              onClick={() => {
-                setMoreDrawerOpen(false);
-                onOpenBizModal();
-              }}
-              className="gba-btn min-h-[42px] px-2 py-1.5 text-[8px] text-[#4ade80] flex items-center justify-center cursor-pointer"
-            >
-              📊 BIZ &amp; DECOR SHOP
-            </button>
-
-            <button
-              type="button"
-              data-testid="drawer-hire-staff-btn"
-              onClick={() => {
-                setMoreDrawerOpen(false);
-                onHireStaff();
-              }}
-              className={`gba-btn min-h-[42px] px-2 py-1.5 text-[8px] flex items-center justify-center cursor-pointer ${
-                canAffordStaff ? 'gba-btn-active' : 'text-[#fb7185]'
+              data-testid="bgm-btn"
+              onClick={onToggleBgm}
+              className={`gba-btn px-2 py-1.5 text-[9px] cursor-pointer text-left truncate ${
+                hud.bgmEnabled ? 'text-[#f472b6]' : 'text-[#64748b]'
               }`}
             >
-              👩‍🍳 HIRE ({hud.hiredStaffCount}/2)
-              {hud.nextStaffCost !== null ? ` $${hud.nextStaffCost}` : ' ★'}
+              {hud.bgmEnabled ? '♪ BGM: ON' : '♪ BGM: OFF'}
             </button>
 
             <button
               type="button"
-              data-testid="drawer-time-btn"
-              onClick={() => {
-                onCycleTimeOfDay();
-              }}
-              className="gba-btn min-h-[42px] px-2 py-1.5 text-[8px] text-[#fde047] flex items-center justify-center cursor-pointer"
+              data-testid="mute-btn"
+              onClick={onToggleMute}
+              className="gba-btn px-2 py-1.5 text-[9px] text-[#e2e8f0] cursor-pointer text-left truncate"
             >
-              {timeLabels[hud.timeOfDay]} [T]
-            </button>
-
-            <button
-              type="button"
-              data-testid="drawer-weather-btn"
-              onClick={() => {
-                onCycleWeather();
-              }}
-              className={`gba-btn min-h-[42px] px-2 py-1.5 text-[8px] flex items-center justify-center cursor-pointer ${
-                hud.weather === 'rain' ? 'gba-btn-active' : 'text-[#86efac]'
-              }`}
-            >
-              {weatherLabels[hud.weather]} [G]
-            </button>
-
-            <button
-              type="button"
-              data-testid="drawer-stations-btn"
-              onClick={() => {
-                setMoreDrawerOpen(false);
-                onToggleDock();
-              }}
-              className={`gba-btn min-h-[42px] px-2 py-1.5 text-[8px] flex items-center justify-center cursor-pointer ${
-                !dockCollapsed ? 'gba-btn-active' : 'text-[#facc15]'
-              }`}
-            >
-              🛠️ STATIONS BAR: {dockCollapsed ? 'OFF' : 'ON'}
-            </button>
-
-            <button
-              type="button"
-              data-testid="drawer-bgm-btn"
-              onClick={() => {
-                onToggleBgm();
-              }}
-              className={`gba-btn min-h-[42px] px-2 py-1.5 text-[8px] flex items-center justify-center cursor-pointer ${
-                hud.bgmEnabled ? 'gba-btn-active' : ''
-              }`}
-            >
-              ♪ BGM: {hud.bgmEnabled ? 'ON' : 'OFF'}
-            </button>
-
-            <button
-              type="button"
-              data-testid="drawer-sfx-btn"
-              onClick={() => {
-                onToggleMute();
-              }}
-              className="gba-btn min-h-[42px] px-2 py-1.5 text-[8px] flex items-center justify-center cursor-pointer"
-            >
-              🔊 SFX: {hud.muted ? 'OFF' : 'ON'}
+              {hud.muted ? '🔇 SFX: MUTED' : '🔊 SFX: ON'}
             </button>
 
             {onResetZoom && (
               <button
                 type="button"
-                data-testid="drawer-reset-zoom-btn"
-                onClick={() => {
-                  onResetZoom();
-                  setMoreDrawerOpen(false);
-                }}
-                className="gba-btn min-h-[42px] px-2 py-1.5 text-[8px] text-[#7dd3fc] flex items-center justify-center cursor-pointer"
+                data-testid="drawer-zoom-btn"
+                onClick={onResetZoom}
+                className="gba-btn px-2 py-1.5 text-[9px] text-[#38bdf8] cursor-pointer text-left truncate"
               >
-                🔍 ZOOM {zoomPct}% (RESET)
+                🔍 ZOOM: {zoomPct}%
               </button>
             )}
 
             <button
               type="button"
-              data-testid="drawer-pause-btn"
+              data-testid="toggle-dock-btn"
+              onClick={onToggleDock}
+              className={`gba-btn px-2 py-1.5 text-[9px] cursor-pointer text-left truncate ${
+                !dockCollapsed ? 'gba-btn-active' : 'text-[#cbd5e1]'
+              }`}
+            >
+              {dockCollapsed ? '▼ SHOW DOCK' : '▲ HIDE DOCK'}
+            </button>
+
+            {!isStandalone && (
+              <button
+                type="button"
+                data-testid="pwa-modal-btn"
+                onClick={() => {
+                  setMoreOpen(false);
+                  onOpenPwaModal();
+                }}
+                className="gba-btn px-2 py-1.5 text-[9px] text-[#38bdf8] cursor-pointer text-left truncate"
+              >
+                📲 APP / APK
+              </button>
+            )}
+
+            <button
+              type="button"
+              data-testid="export-code-btn"
               onClick={() => {
-                setMoreDrawerOpen(false);
+                setMoreOpen(false);
+                onOpenCodeModal();
+              }}
+              className="gba-btn px-2 py-1.5 text-[9px] text-[#38bdf8] cursor-pointer text-left truncate"
+            >
+              &lt;/&gt; HTML CODE
+            </button>
+
+            <button
+              type="button"
+              data-testid="pause-btn"
+              onClick={() => {
+                setMoreOpen(false);
                 onPause();
               }}
-              className="gba-btn min-h-[42px] px-2 py-1.5 text-[8px] flex items-center justify-center cursor-pointer"
+              className="gba-btn px-2 py-1.5 text-[9px] text-[#e2e8f0] cursor-pointer text-left truncate"
             >
               II PAUSE SHIFT
             </button>
 
             <button
               type="button"
-              data-testid="drawer-restart-btn"
+              data-testid="restart-btn"
               onClick={() => {
-                setMoreDrawerOpen(false);
+                setMoreOpen(false);
                 onRestart();
               }}
-              className="gba-btn min-h-[42px] px-2 py-1.5 text-[8px] text-[#fb7185] flex items-center justify-center cursor-pointer"
+              className="gba-btn px-2 py-1.5 text-[9px] text-[#fda4af] cursor-pointer text-left truncate"
             >
-              ↻ RESET SHIFT
+              ↻ RESTART DAY
             </button>
-
-            <button
-              type="button"
-              data-testid="drawer-html-btn"
-              onClick={() => {
-                setMoreDrawerOpen(false);
-                onOpenCodeModal();
-              }}
-              className="gba-btn min-h-[42px] px-2 py-1.5 text-[8px] text-[#86efac] flex items-center justify-center cursor-pointer"
-            >
-              📄 HTML EXPORT
-            </button>
-
-            {!isStandalone && (
-              <button
-                type="button"
-                data-testid="drawer-pwa-btn"
-                onClick={() => {
-                  setMoreDrawerOpen(false);
-                  onOpenPwaModal();
-                }}
-                className="gba-btn min-h-[42px] px-2 py-1.5 text-[8px] text-[#f87171] flex items-center justify-center cursor-pointer"
-              >
-                📲 INSTALL APP / APK
-              </button>
-            )}
           </div>
         </div>
       )}
@@ -745,187 +452,167 @@ export const TopHudBar: React.FC<TopHudBarProps> = ({
   );
 };
 
-interface FloatingCanvasQuickBarProps {
-  hud: HudSnapshot;
-  cameraZoom?: number;
-  onZoomIn?: () => void;
-  onZoomOut?: () => void;
-  onResetZoom?: () => void;
-  onSmartStep: () => void;
-  onWaterAllDaisies: () => void;
-  onHireStaff: () => void;
-  onOpenBizModal: () => void;
-  onPetCats: () => void;
-  onToggleRoom: () => void;
+interface TopLeftZoomControlsProps {
+  cameraZoom: number;
+  onZoomIn: () => void;
+  onZoomOut: () => void;
+  onResetZoom: () => void;
 }
 
 /**
- * Slim corner action buttons positioned in the bottom-right corner of the viewport
- * so mobile & landscape players can play without blocking the South Doorway or tables.
+ * Compact Zoom Pill Strip (`-`, `100%`, `+`) anchored in the top-left corner of `#stage`
+ * so the bottom-right quick-bar stays dedicated to the 4 core gameplay actions.
  */
-export const FloatingCanvasQuickBar: React.FC<FloatingCanvasQuickBarProps> = ({
-  hud,
-  cameraZoom = 1,
+export const TopLeftZoomControls: React.FC<TopLeftZoomControlsProps> = ({
+  cameraZoom,
   onZoomIn,
   onZoomOut,
   onResetZoom,
+}) => {
+  const zoomPct = Math.round(cameraZoom * 100);
+
+  return (
+    <div
+      data-testid="top-left-zoom-controls"
+      className="pointer-events-auto flex items-center gap-0.5 bg-[#090b10]/90 border-2 border-[#475569] px-1 py-0.5 shadow-[0_2px_0_#000000]"
+    >
+      <button
+        type="button"
+        data-testid="zoom-out-btn"
+        onClick={onZoomOut}
+        className="px-1.5 py-0.5 text-[9px] font-bold text-[#cbd5e1] hover:text-[#facc15] cursor-pointer"
+        title="Zoom Out [-]"
+      >
+        -
+      </button>
+      <button
+        type="button"
+        data-testid="zoom-reset-btn"
+        onClick={onResetZoom}
+        className="px-1.5 py-0.5 text-[8px] font-bold text-[#38bdf8] hover:text-[#facc15] tabular-nums cursor-pointer"
+        title="Toggle 100% Overview / Station Focus"
+      >
+        {zoomPct}%
+      </button>
+      <button
+        type="button"
+        data-testid="zoom-in-btn"
+        onClick={onZoomIn}
+        className="px-1.5 py-0.5 text-[9px] font-bold text-[#cbd5e1] hover:text-[#facc15] cursor-pointer"
+        title="Zoom In [+]"
+      >
+        +
+      </button>
+    </div>
+  );
+};
+
+interface FloatingQuickBarProps {
+  hud: HudSnapshot;
+  onSmartStep: () => void;
+  onWaterAllDaisies: () => void;
+  onHireStaff: () => void;
+  onPetCats: () => void;
+}
+
+/**
+ * Unobstructed 4-Button Bottom-Right Quick-Bar (`⚡ STEP`, `👩‍🍳 HIRE`, `💧 WATER`, `🐾 CATS`)
+ * Leaves the `▼ TO GARDEN [V]` doorway mat completely unobstructed.
+ */
+export const FloatingCanvasQuickBar: React.FC<FloatingQuickBarProps> = ({
+  hud,
   onSmartStep,
   onWaterAllDaisies,
   onHireStaff,
-  onOpenBizModal,
   onPetCats,
-  onToggleRoom,
 }) => {
-  const orderRecipe = hud.waitingCustomerOrder ? RECIPES[hud.waitingCustomerOrder] : null;
-  const canAffordStaff = hud.nextStaffCost !== null && hud.coins >= hud.nextStaffCost;
-  const zoomPct = Math.round(cameraZoom * 100);
+  const targetDrink: DrinkId =
+    hud.activeDrink ?? hud.waitingCustomerOrder ?? 'miata_mocha';
+  const activeRecipe = RECIPES[targetDrink];
+  const isReadyToServe = hud.currentStepIndex === 3;
+  const currentStepStation =
+    hud.currentStepIndex < 3 ? activeRecipe.steps[hud.currentStepIndex] : null;
+  const stationMeta = currentStepStation
+    ? STATIONS.find((s) => s.id === currentStepStation)
+    : null;
 
-  let smartLabel = '⚡ BREW / SERVE';
-  if (hud.currentStepIndex === 3) {
-    smartLabel = '⚡ SERVE GUEST!';
-  } else if (orderRecipe) {
-    const nextSt = orderRecipe.steps[hud.currentStepIndex];
-    const shortMap: Record<StationId, string> = {
-      grinder: '⚡ STEP 1: GRIND',
-      espresso: '⚡ STEP 2: SHOT',
-      milk_frother: '⚡ STEP 2: FOAM',
-      kettle: '⚡ STEP 1: BOIL',
-      tea_leaves: '⚡ STEP 2: STEEP',
-      cup_counter: '⚡ STEP 3: POUR',
-      watering_can: '⚡ WATER',
-      trash: '⚡ CLEAR',
-    };
-    smartLabel = shortMap[nextSt] ?? '⚡ BREW / SERVE';
-  }
+  const smartLabel = isReadyToServe
+    ? '⚡ SERVE!'
+    : hud.isProcessing
+    ? '⏳ BREWING'
+    : `⚡ ${stationMeta?.shortLabel ?? 'STEP'}`;
 
   return (
-    <div className="klasik-quick-bar pointer-events-auto flex flex-wrap items-center justify-end gap-1">
-      {/* 2D Camera Zoom Quick Controls ([-], [100%] / 🔍 RESET, [+]) */}
-      {onZoomOut && onResetZoom && onZoomIn && (
-        <div
-          data-testid="quick-zoom-controls"
-          className="inline-flex items-center gap-0.5 bg-[#090b10]/90 border border-[#475569] p-0.5 shadow-lg"
-        >
-          <button
-            type="button"
-            data-testid="quick-zoom-out-btn"
-            aria-label="Zoom Out Camera"
-            onClick={(e) => {
-              e.currentTarget.blur();
-              onZoomOut();
-            }}
-            className="gba-btn px-1.5 py-0.5 text-[8px] text-[#7dd3fc] cursor-pointer"
-          >
-            -
-          </button>
-          <button
-            type="button"
-            data-testid="quick-zoom-reset-btn"
-            aria-label="Reset Camera Zoom"
-            onClick={(e) => {
-              e.currentTarget.blur();
-              onResetZoom();
-            }}
-            className={`gba-btn px-1.5 py-0.5 text-[8px] cursor-pointer tabular-nums ${
-              cameraZoom > 1.05 ? 'text-[#facc15]' : 'text-[#cbd5e1]'
-            }`}
-          >
-            🔍{zoomPct}%
-          </button>
-          <button
-            type="button"
-            data-testid="quick-zoom-in-btn"
-            aria-label="Zoom In Camera"
-            onClick={(e) => {
-              e.currentTarget.blur();
-              onZoomIn();
-            }}
-            className="gba-btn px-1.5 py-0.5 text-[8px] text-[#7dd3fc] cursor-pointer"
-          >
-            +
-          </button>
-        </div>
-      )}
-
+    <div
+      data-testid="floating-quick-bar"
+      className="flex flex-wrap items-center justify-end gap-1 pointer-events-auto"
+    >
       <button
         type="button"
         data-testid="quick-smart-step-btn"
-        onClick={(e) => {
-          e.currentTarget.blur();
-          onSmartStep();
-        }}
-        className="gba-btn gba-btn-active px-2 py-1 text-[8px] sm:text-[9px] cursor-pointer shadow-lg"
+        onClick={onSmartStep}
+        className={`gba-btn px-2 py-1 text-[9px] cursor-pointer ${
+          isReadyToServe ? 'gba-btn-active animate-pulse' : 'text-[#fde047]'
+        }`}
+        title="Smart Prep / Serve [E]"
       >
         {smartLabel}
       </button>
 
-      <button
-        type="button"
-        data-testid="quick-hire-staff-btn"
-        onClick={(e) => {
-          e.currentTarget.blur();
-          onHireStaff();
-        }}
-        className={`gba-btn px-2 py-1 text-[8px] sm:text-[9px] cursor-pointer shadow-lg ${
-          canAffordStaff ? 'gba-btn-active' : 'text-[#fb7185]'
-        }`}
-      >
-        👩‍🍳 HIRE ({hud.hiredStaffCount}/2)
-        {hud.nextStaffCost !== null ? ` $${hud.nextStaffCost}` : ' ★'}
-      </button>
+      {hud.nextStaffName ? (
+        <button
+          type="button"
+          data-testid="quick-hire-staff-btn"
+          onClick={onHireStaff}
+          className={`gba-btn px-2 py-1 text-[9px] cursor-pointer ${
+            hud.coins >= (hud.nextStaffCost ?? 999)
+              ? 'gba-btn-active'
+              : 'text-[#cbd5e1]'
+          }`}
+          title="Hire Hired Help [K]"
+        >
+          👩‍🍳 HIRE {hud.nextStaffName.toUpperCase()} ({hud.nextStaffCost}c)
+        </button>
+      ) : (
+        <button
+          type="button"
+          data-testid="quick-hire-staff-btn"
+          onClick={onHireStaff}
+          className="gba-btn px-2 py-1 text-[9px] text-[#4ade80] cursor-pointer"
+          title="Staff Crew Active"
+        >
+          👩‍🍳 STAFF ({hud.hiredStaffCount}/2)
+        </button>
+      )}
 
       <button
         type="button"
         data-testid="quick-water-btn"
-        onClick={(e) => {
-          e.currentTarget.blur();
-          onWaterAllDaisies();
-        }}
-        className="gba-btn px-2 py-1 text-[8px] sm:text-[9px] text-[#7dd3fc] cursor-pointer shadow-lg"
+        onClick={onWaterAllDaisies}
+        className={`gba-btn px-2 py-1 text-[9px] cursor-pointer ${
+          hud.thirstyDaisyCount > 0
+            ? 'gba-btn-active animate-pulse'
+            : 'text-[#7dd3fc]'
+        }`}
+        title="Water Thirsty Daisies [W]"
       >
         💧 WATER {hud.thirstyDaisyCount > 0 ? `(${hud.thirstyDaisyCount})` : ''}
       </button>
 
       <button
         type="button"
-        data-testid="quick-biz-btn"
-        onClick={(e) => {
-          e.currentTarget.blur();
-          onOpenBizModal();
-        }}
-        className="gba-btn px-2 py-1 text-[8px] sm:text-[9px] text-[#4ade80] cursor-pointer shadow-lg"
-      >
-        📊 BIZ &amp; SHOP
-      </button>
-
-      <button
-        type="button"
-        data-testid="quick-pet-cat-btn"
-        onClick={(e) => {
-          e.currentTarget.blur();
-          onPetCats();
-        }}
-        className="gba-btn px-2 py-1 text-[8px] sm:text-[9px] text-[#fb7185] cursor-pointer shadow-lg"
+        data-testid="quick-pet-cats-btn"
+        onClick={onPetCats}
+        className="gba-btn px-2 py-1 text-[9px] text-[#f9a8d4] cursor-pointer"
+        title="Pet Lilo & Champy [C]"
       >
         🐾 CATS
-      </button>
-
-      <button
-        type="button"
-        data-testid="quick-room-btn"
-        onClick={(e) => {
-          e.currentTarget.blur();
-          onToggleRoom();
-        }}
-        className="gba-btn px-2 py-1 text-[8px] sm:text-[9px] text-[#facc15] cursor-pointer shadow-lg"
-      >
-        🚪 {hud.room === 'inside' ? 'GARDEN' : 'INSIDE'}
       </button>
     </div>
   );
 };
 
-interface BottomActionDockProps {
+interface BottomDockProps {
   hud: HudSnapshot;
   collapsed: boolean;
   onTriggerStation: (stationId: StationId) => void;
@@ -935,7 +622,7 @@ interface BottomActionDockProps {
   onPetCats: () => void;
 }
 
-export const BottomActionDock: React.FC<BottomActionDockProps> = ({
+export const BottomActionDock: React.FC<BottomDockProps> = ({
   hud,
   collapsed,
   onTriggerStation,
@@ -948,179 +635,132 @@ export const BottomActionDock: React.FC<BottomActionDockProps> = ({
     return null;
   }
 
-  const orderRecipe = hud.waitingCustomerOrder ? RECIPES[hud.waitingCustomerOrder] : null;
-  const activeRecipe = hud.activeDrink ? RECIPES[hud.activeDrink] : null;
+  const targetDrink: DrinkId =
+    hud.activeDrink ?? hud.waitingCustomerOrder ?? 'miata_mocha';
+  const activeRecipe = RECIPES[targetDrink];
+  const isReadyToServe = hud.currentStepIndex === 3;
+  const requiredStation =
+    hud.currentStepIndex < 3 ? activeRecipe.steps[hud.currentStepIndex] : null;
 
-  let nextStationId: StationId | null = null;
-  if (orderRecipe && hud.currentStepIndex < 3) {
-    nextStationId = orderRecipe.steps[hud.currentStepIndex];
-  }
-
-  return (
-    <footer
-      data-testid="bottom-stations-dock"
-      className="w-full bg-[#0b0d12] border-t-[3px] border-[#f8fafc] px-1.5 py-1 shrink-0 flex flex-wrap items-center justify-center gap-1 overflow-x-hidden"
-    >
-      <StationDockButton
-        label="Grinder"
-        roleClue="Step 1 · Coffee"
-        hotkey="1"
-        isRecommended={nextStationId === 'grinder'}
-        onClick={() => onTriggerStation('grinder')}
-      />
-
-      <StationDockButton
-        label="Espresso"
-        roleClue="Step 2 · Mocha"
-        hotkey="2"
-        isRecommended={nextStationId === 'espresso'}
-        onClick={() => onTriggerStation('espresso')}
-      />
-
-      <StationDockButton
-        label="Frother"
-        roleClue="Step 2 · Foam"
-        hotkey="3"
-        isRecommended={nextStationId === 'milk_frother'}
-        onClick={() => onTriggerStation('milk_frother')}
-      />
-
-      <StationDockButton
-        label="Kettle"
-        roleClue="Step 1 · Water"
-        hotkey="4"
-        isRecommended={nextStationId === 'kettle'}
-        onClick={() => onTriggerStation('kettle')}
-      />
-
-      <StationDockButton
-        label="Tea Leaves"
-        roleClue="Step 2 · Tea"
-        hotkey="5"
-        isRecommended={nextStationId === 'tea_leaves'}
-        onClick={() => onTriggerStation('tea_leaves')}
-      />
-
-      <StationDockButton
-        label="Pour Cup"
-        roleClue="Step 3 · Cup"
-        hotkey="Space"
-        isRecommended={nextStationId === 'cup_counter'}
-        onClick={() => onTriggerStation('cup_counter')}
-      />
-
-      <button
-        type="button"
-        onClick={(e) => {
-          e.currentTarget.blur();
-          onServeCustomer();
-        }}
-        className={`gba-btn px-1.5 py-0.5 text-left cursor-pointer whitespace-nowrap shrink-0 ${
-          hud.currentStepIndex === 3 ? 'gba-btn-active' : ''
-        }`}
-      >
-        <div className="flex items-center gap-1">
-          <span className="gba-keycap">Enter</span>
-          <span className="text-[8px]">
-            {hud.currentStepIndex === 3 && activeRecipe
-              ? `Serve ${activeRecipe.shortName}`
-              : 'Serve Drink'}
-          </span>
-        </div>
-        <div className="text-sm font-['VT323'] leading-none mt-0.5 opacity-90">
-          {hud.currentStepIndex === 3 ? '★ Hand to Guest!' : 'Needs Step 3 Cup'}
-        </div>
-      </button>
-
-      <button
-        type="button"
-        onClick={(e) => {
-          e.currentTarget.blur();
-          onWaterAllDaisies();
-        }}
-        className="gba-btn px-1.5 py-0.5 text-left cursor-pointer whitespace-nowrap shrink-0"
-      >
-        <div className="flex items-center gap-1">
-          <span className="gba-keycap">W</span>
-          <span className="text-[8px]">Water Daisies</span>
-        </div>
-        <div className="text-sm font-['VT323'] leading-none mt-0.5 text-[#7dd3fc] tabular-nums">
-          {hud.weather === 'rain'
-            ? '🌧️ Rain Hydrating!'
-            : hud.thirstyDaisyCount > 0
-              ? `${Math.round(hud.thirstyDaisyCount)} thirsty · +2c`
-              : '6 Beds Hydrated'}
-        </div>
-      </button>
-
-      <button
-        type="button"
-        onClick={(e) => {
-          e.currentTarget.blur();
-          onToggleMiataHeadlights();
-        }}
-        className="gba-btn px-1.5 py-0.5 text-left cursor-pointer whitespace-nowrap shrink-0"
-      >
-        <div className="flex items-center gap-1">
-          <span className="gba-keycap">H</span>
-          <span className="text-[8px]">Miata Lights</span>
-        </div>
-        <div className="text-sm font-['VT323'] leading-none mt-0.5 text-[#facc15]">
-          {hud.miataHeadlightsOn ? 'Pop-Ups: ON ★' : 'Pop-Ups: OFF'}
-        </div>
-      </button>
-
-      <button
-        type="button"
-        onClick={(e) => {
-          e.currentTarget.blur();
-          onPetCats();
-        }}
-        className="gba-btn px-1.5 py-0.5 text-left cursor-pointer whitespace-nowrap shrink-0"
-      >
-        <div className="flex items-center gap-1">
-          <span className="gba-keycap">C</span>
-          <span className="text-[8px]">Pet Cats</span>
-        </div>
-        <div className="text-sm font-['VT323'] leading-none mt-0.5 text-[#fb7185]">
-          Lilo &amp; Champy ♥
-        </div>
-      </button>
-    </footer>
+  const discount = hud.finance.upgrades.direct_trade_beans ? 1.5 : 0;
+  const unitCogs = Math.max(
+    0.5,
+    Number(((hud.finance.ingredientStock > 0 ? 2.0 : 4.0) - discount).toFixed(2))
   );
-};
+  const sleeveBonus = hud.finance.upgrades.custom_sleeves ? 4 : 0;
+  const cozyBonus = hud.cozyRating >= 80 ? 5 : hud.cozyRating >= 60 ? 3 : 0;
+  const netProfit = activeRecipe.price + sleeveBonus + cozyBonus - unitCogs;
 
-interface StationDockButtonProps {
-  label: string;
-  roleClue: string;
-  hotkey: string;
-  isRecommended: boolean;
-  onClick: () => void;
-}
+  const brewStations: Array<{ id: StationId; num: string; icon: string }> = [
+    { id: 'grinder', num: '1', icon: '🫘' },
+    { id: 'espresso', num: '2', icon: '☕' },
+    { id: 'milk_frother', num: '3', icon: '🥛' },
+    { id: 'kettle', num: '4', icon: '🫖' },
+    { id: 'tea_leaves', num: '5', icon: '🌿' },
+  ];
 
-const StationDockButton: React.FC<StationDockButtonProps> = ({
-  label,
-  roleClue,
-  hotkey,
-  isRecommended,
-  onClick,
-}) => {
   return (
-    <button
-      type="button"
-      onClick={(e) => {
-        e.currentTarget.blur();
-        onClick();
-      }}
-      className={`gba-btn px-1.5 py-0.5 text-left cursor-pointer whitespace-nowrap shrink-0 ${
-        isRecommended ? 'gba-btn-active' : ''
-      }`}
-    >
-      <div className="flex items-center gap-1">
-        <span className="gba-keycap">{hotkey}</span>
-        <span className="text-[8px]">{label}</span>
+    <footer className="w-full shrink-0 bg-[#12161f] border-t-[3px] border-[#f8fafc] px-2.5 py-1.5 z-20">
+      <div className="max-w-[1440px] mx-auto flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-2 bg-[#090b0e] border-2 border-[#334155] px-2.5 py-1">
+          <div className="flex items-center gap-1.5">
+            <span className="text-[9px] text-[#94a3b8]">ORDER:</span>
+            <span className="text-[10px] font-bold text-[#facc15]">
+              {activeRecipe.shortName}
+            </span>
+            <span className="text-[9px] text-[#4ade80]">
+              (Net +${netProfit.toFixed(1)})
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1">
+            {activeRecipe.stepLabels.map((lbl: string, idx: number) => {
+              const done = hud.currentStepIndex > idx;
+              const current = hud.currentStepIndex === idx;
+              return (
+                <span
+                  key={lbl}
+                  className={`px-1.5 py-0.5 text-[8px] border ${
+                    done
+                      ? 'bg-[#14532d] border-[#4ade80] text-[#dcfce7]'
+                      : current
+                      ? 'bg-[#422006] border-[#facc15] text-[#fef08a]'
+                      : 'bg-[#161b24] border-[#334155] text-[#64748b]'
+                  }`}
+                >
+                  {done ? '✓' : idx + 1}.{lbl}
+                </span>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-1.5">
+          {brewStations.map((bs) => {
+            const st = STATIONS.find((s) => s.id === bs.id)!;
+            const isNext = requiredStation === bs.id;
+            const lvl = hud.stationLevels[bs.id as UpgradableStationId] ?? 1;
+            return (
+              <button
+                key={bs.id}
+                type="button"
+                data-station={bs.id}
+                onClick={() => onTriggerStation(bs.id)}
+                className={`gba-btn px-2 py-1 text-[9px] cursor-pointer flex items-center gap-1 ${
+                  isNext ? 'gba-btn-active' : 'text-[#e2e8f0]'
+                }`}
+              >
+                <span className="text-[#94a3b8]">[{bs.num}]</span>
+                <span>{bs.icon}</span>
+                <span>{st.shortLabel}</span>
+                <span className="text-[8px] text-[#facc15]">L{lvl}</span>
+              </button>
+            );
+          })}
+
+          <button
+            type="button"
+            data-testid="serve-btn"
+            onClick={onServeCustomer}
+            className={`gba-btn px-2.5 py-1 text-[9px] font-bold cursor-pointer ${
+              isReadyToServe ? 'gba-btn-active animate-pulse' : 'text-[#86efac]'
+            }`}
+          >
+            🛎 SERVE [SPACE]
+          </button>
+
+          <button
+            type="button"
+            data-testid="water-daisies-btn"
+            onClick={onWaterAllDaisies}
+            className={`gba-btn px-2 py-1 text-[9px] cursor-pointer ${
+              hud.thirstyDaisyCount > 0 ? 'gba-btn-active' : 'text-[#7dd3fc]'
+            }`}
+          >
+            💧 DAISIES [W]
+          </button>
+
+          <button
+            type="button"
+            data-testid="miata-headlights-btn"
+            onClick={onToggleMiataHeadlights}
+            className={`gba-btn px-2 py-1 text-[9px] cursor-pointer ${
+              hud.miataHeadlightsOn ? 'gba-btn-active' : 'text-[#fca5a5]'
+            }`}
+          >
+            🚗 MIATA ({hud.miataColor.toUpperCase()}) [H]
+          </button>
+
+          <button
+            type="button"
+            data-testid="pet-cats-btn"
+            onClick={onPetCats}
+            className="gba-btn px-2 py-1 text-[9px] text-[#f9a8d4] cursor-pointer"
+          >
+            🐾 CATS [C]
+          </button>
+        </div>
       </div>
-      <div className="text-sm font-['VT323'] leading-none mt-0.5 opacity-90">{roleClue}</div>
-    </button>
+    </footer>
   );
 };

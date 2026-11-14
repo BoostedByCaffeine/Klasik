@@ -1,161 +1,89 @@
+@import '@fontsource/press-start-2p/400.css';
+@import '@fontsource/silkscreen/400.css';
+@import '@fontsource/silkscreen/700.css';
+@import '@fontsource/vt323/400.css';
 @import "tailwindcss";
 
 @layer base {
   :root {
-    --font-pixel: 'Silkscreen', 'Press Start 2P', ui-monospace, 'Cascadia Mono', 'Courier New', monospace;
-    --font-dialogue: 'VT323', ui-monospace, 'Cascadia Mono', 'Courier New', monospace;
+    --font-title: 'Press Start 2P', 'Silkscreen', monospace;
+    --font-pixel: 'Silkscreen', 'Press Start 2P', monospace;
+    --font-dialogue: 'VT323', 'Silkscreen', monospace;
+  }
+
+  * {
+    image-rendering: pixelated;
+    user-select: none;
+    -webkit-user-select: none;
   }
 
   html,
   body,
   #root {
-    background-color: #090b10 !important;
+    font-family: var(--font-pixel);
+    background-color: #090b10;
     color: #f8fafc;
+    overflow: hidden;
+    touch-action: manipulation;
     width: 100vw;
     height: 100vh;
     height: 100dvh;
     margin: 0;
-    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
-    box-sizing: border-box;
-    overflow: hidden;
-    font-family: var(--font-dialogue);
-    image-rendering: pixelated;
-    -webkit-font-smoothing: none;
   }
 }
 
-/* Crisp 16-bit GBA Stepped Pixel Frame Borders */
+/* Crisp GBA Stepped Pixel Borders & Cards */
 .gba-frame {
-  background-color: #161920;
+  background-color: #161b24;
   border: 3px solid #f8fafc;
   box-shadow:
-    inset 0 0 0 3px #333947,
+    inset 0 0 0 3px #334155,
     0 4px 0 #090b0e;
 }
 
-.gba-dialogue-box {
-  background-color: #f8fafc;
-  color: #111318;
-  border: 3px solid #111318;
-  box-shadow:
-    inset 0 0 0 3px #cbd5e1,
-    0 4px 0 #090b0e;
+.gba-dialogue {
+  font-family: var(--font-dialogue);
 }
 
 .gba-btn {
   font-family: var(--font-pixel);
-  background-color: #1e232d;
-  color: #f8fafc;
-  border: 2px solid #e2e8f0;
+  background-color: #1e2532;
+  border: 2px solid #f8fafc;
   box-shadow:
-    inset 0 -3px 0 #0f1218,
+    inset 0 -2px 0 #0f141c,
     0 3px 0 #090b0e;
-  transition: transform 0.08s steps(2);
+  transition: transform 60ms steps(2);
 }
 
 .gba-btn:hover {
-  background-color: #2d3544;
-  border-color: #ffffff;
+  background-color: #283244;
+  border-color: #fde047;
 }
 
 .gba-btn:active {
   transform: translateY(2px);
   box-shadow:
-    inset 0 -1px 0 #0f1218,
+    inset 0 1px 0 #0f141c,
     0 1px 0 #090b0e;
 }
 
 .gba-btn-active {
-  background-color: #facc15;
-  color: #111318;
-  border-color: #ffffff;
-  box-shadow:
-    inset 0 -3px 0 #ca8a04,
-    0 3px 0 #090b0e;
+  background-color: #422006;
+  border-color: #facc15;
+  color: #fef08a;
 }
 
-.gba-keycap {
-  font-family: var(--font-pixel);
-  display: inline-block;
-  padding: 2px 5px;
-  font-size: 9px;
-  line-height: 1;
-  background-color: #0f1218;
-  color: #facc15;
-  border: 2px solid #94a3b8;
-  box-shadow: 0 2px 0 #050608;
+/* Custom Pixel Scrollbars for Modals */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
 }
 
-/* Responsive Modal Grid: collapses to 1fr below 600px so nothing overflows horizontally */
-.klasik-modal-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 0.625rem;
+::-webkit-scrollbar-track {
+  background: #090b10;
 }
 
-@media (max-width: 600px) {
-  .klasik-modal-grid {
-    grid-template-columns: 1fr !important;
-  }
+::-webkit-scrollbar-thumb {
+  background: #334155;
+  border: 1px solid #f8fafc;
 }
-
-/* Mobile Landscape Polish (@media (max-height: 540px)):
-   Ultra-compact single-row top bar and slim corner action buttons */
-@media (max-height: 540px) {
-  .klasik-top-hud {
-    padding: 2px 6px !important;
-    border-bottom-width: 2px !important;
-    gap: 4px !important;
-    flex-wrap: nowrap !important;
-  }
-
-  .klasik-top-hud .gba-frame {
-    padding: 2px 6px !important;
-    border-width: 2px !important;
-    box-shadow: none !important;
-  }
-
-  .klasik-top-hud .gba-btn {
-    height: 22px !important;
-    padding: 0 5px !important;
-    border-width: 1px !important;
-    box-shadow: none !important;
-  }
-
-  .klasik-quick-bar button {
-    padding: 3px 6px !important;
-    font-size: 7px !important;
-    border-width: 1.5px !important;
-  }
-}
-
-@keyframes klasik-flame-pulse {
-  0% {
-    transform: scale(1);
-    filter: drop-shadow(0 0 0 rgba(251, 146, 60, 0));
-  }
-  25% {
-    transform: scale(1.42) translateY(-1px);
-    filter: drop-shadow(0 0 6px rgba(251, 146, 60, 0.95));
-  }
-  50% {
-    transform: scale(1.12);
-    filter: drop-shadow(0 0 3px rgba(249, 115, 22, 0.7));
-  }
-  75% {
-    transform: scale(1.36) translateY(-1px);
-    filter: drop-shadow(0 0 6px rgba(250, 204, 21, 0.9));
-  }
-  100% {
-    transform: scale(1);
-    filter: drop-shadow(0 0 0 rgba(251, 146, 60, 0));
-  }
-}
-
-.klasik-flame-pulse {
-  transform-origin: center;
-  will-change: transform, filter;
-  animation: klasik-flame-pulse 0.75s cubic-bezier(0.22, 1, 0.36, 1) 3;
-}
-
-

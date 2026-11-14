@@ -61,9 +61,14 @@ import {
   WORLD_HEIGHT,
 } from './game/pixelArt';
 import { soundEngine } from './game/sound';
-import { BootLoadingScreen, TitleScreen } from './components/TitleScreen';
+import {
+  BootLoadingScreen,
+  TitleScreen,
+  RotateLandscapeOverlay,
+} from './components/TitleScreen';
 import {
   TopHudBar,
+  TopLeftZoomControls,
   BottomActionDock,
   FloatingCanvasQuickBar,
   HudSnapshot,
@@ -79,6 +84,7 @@ import {
   initKlasikPwa,
   BeforeInstallPromptEvent,
   isStandaloneApp,
+  tryLockLandscapeOrientation,
 } from './pwa/pwaManager';
 
 function makeHudSnapshot(state: CafeState): HudSnapshot {
@@ -247,24 +253,37 @@ export default function App() {
     document.body.dataset.state = autostart ? 'playing' : 'title';
   }, [autostart]);
 
+  const [isMobilePortrait, setIsMobilePortrait] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    const isPortrait = window.innerHeight > window.innerWidth;
+    const isMobileOrCoarse =
+      window.innerWidth <= 920 ||
+      (typeof window.matchMedia === 'function' &&
+        window.matchMedia('(pointer: coarse)').matches);
+    return isPortrait && isMobileOrCoarse;
+  });
+  const [portraitDismissed, setPortraitDismissed] = useState<boolean>(false);
+
   useEffect(() => {
-    let lastPortrait = window.innerHeight > window.innerWidth;
     const onResize = () => {
       const isPortraitNow = window.innerHeight > window.innerWidth;
-      if (isPortraitNow !== lastPortrait) {
-        lastPortrait = isPortraitNow;
-        applyCamera(
-          getDefaultCameraForViewport(
-            window.innerWidth,
-            window.innerHeight,
-            gameStateRef.current.room
-          )
-        );
+      const isMobileOrCoarse =
+        window.innerWidth <= 920 ||
+        (typeof window.matchMedia === 'function' &&
+          window.matchMedia('(pointer: coarse)').matches);
+      const nextMobilePortrait = isPortraitNow && isMobileOrCoarse;
+      setIsMobilePortrait(nextMobilePortrait);
+      if (!isPortraitNow) {
+        setPortraitDismissed(false);
       }
     };
     window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
-  }, [applyCamera]);
+    window.addEventListener('orientationchange', onResize);
+    return () => {
+      window.removeEventListener('resize', onResize);
+      window.removeEventListener('orientationchange', onResize);
+    };
+  }, []);
 
   useEffect(() => {
     void initKlasikPwa().then((res) => {
@@ -309,6 +328,7 @@ export default function App() {
     try {
       if (!document.fullscreenElement) {
         void document.documentElement.requestFullscreen?.();
+        tryLockLandscapeOrientation();
       } else {
         void document.exitFullscreen?.();
       }
@@ -361,6 +381,7 @@ export default function App() {
     if (document.activeElement instanceof HTMLElement) {
       document.activeElement.blur();
     }
+    tryLockLandscapeOrientation();
     keysPressedRef.current.clear();
     syncBodyMode('playing');
     soundEngine.playCustomerBell();
@@ -1175,8 +1196,10 @@ export default function App() {
       const canvas = canvasRef.current;
       if (canvas) {
         const dpr = Math.min(window.devicePixelRatio || 1, 2);
-        const targetW = Math.round(WORLD_WIDTH * dpr);
-        const targetH = Math.round(WORLD_HEIGHT * dpr);
+        const stageW = Math.max(320, canvas.clientWidth || WORLD_WIDTH);
+        const stageH = Math.max(180, canvas.clientHeight || WORLD_HEIGHT);
+        const targetW = Math.round(stageW * dpr);
+        const targetH = Math.round(stageH * dpr);
         if (canvas.width !== targetW || canvas.height !== targetH) {
           canvas.width = targetW;
           canvas.height = targetH;
@@ -1193,7 +1216,9 @@ export default function App() {
             hoveredStationRef.current,
             hoveredDaisyRef.current,
             hoveredMiataRef.current,
-            cameraRef.current
+            cameraRef.current,
+            stageW,
+            stageH
           );
         }
       }
@@ -1379,7 +1404,7 @@ export default function App() {
       const dist = Math.hypot(dx, dy);
       drag.maxDist = Math.max(drag.maxDist, dist);
 
-      if (cameraRef.current.zoom > 1.05 && drag.maxDist >= 4) {
+      if (cameraRef.current.zoom > 1.02 && drag.maxDist >= 8) {
         const canvas = canvasRef.current;
         if (canvas) {
           const rect = canvas.getBoundingClientRect();
@@ -1460,8 +1485,8 @@ export default function App() {
       maxDist: 0,
     };
 
-    // When unzoomed (<= 1.05x), trigger station/entity tap immediately on pointerdown
-    if (cameraRef.current.zoom <= 1.05) {
+    // When unzoomed (<= 1.02x), trigger station/entity tap immediately on pointerdown
+    if (cameraRef.current.zoom <= 1.02) {
       handleWorldTap(e.clientX, e.clientY);
     }
   };
@@ -1488,7 +1513,7 @@ export default function App() {
           return;
         }
         lastTapTimeRef.current = now;
-        if (cameraRef.current.zoom > 1.05) {
+        if (cameraRef.current.zoom > 1.02) {
           handleWorldTap(e.clientX, e.clientY);
         }
       }
@@ -1555,8 +1580,12 @@ export default function App() {
         />
       )}
 
-      {/* Dedicated Non-Overlapping GBA Pixel-Art Viewport Stage */}
-      <div className="relative flex-1 min-h-0 w-full flex items-center justify-center p-1 bg-[#090b10]">
+      {/* Full-Viewport GBA Pixel-Art Stage (#stage) — No Fixed-Aspect Clipping when Zoomed */}
+      <div
+        id="stage"
+        data-testid="game-stage"
+        className="relative flex-1 min-h-0 w-full flex items-center justify-center bg-[#090b10] overflow-hidden"
+      >
         <canvas
           ref={canvasRef}
           data-testid="klasik-canvas"
@@ -1568,9 +1597,21 @@ export default function App() {
           onPointerUp={handleCanvasPointerUp}
           onPointerCancel={handleCanvasPointerCancel}
           onPointerLeave={handleCanvasPointerCancel}
-          className="w-full h-full object-contain cursor-pointer border-[3px] border-[#334155]"
+          className="w-full h-full block cursor-pointer"
           style={{ imageRendering: 'pixelated', touchAction: 'none' }}
         />
+
+        {/* Top-Left Zoom Controls (-, 100%, +) */}
+        {uiMode === 'playing' && (
+          <div className="pointer-events-none absolute top-2 left-2.5 z-10">
+            <TopLeftZoomControls
+              cameraZoom={cameraZoom}
+              onZoomIn={handleZoomIn}
+              onZoomOut={handleZoomOut}
+              onResetZoom={handleResetZoom}
+            />
+          </div>
+        )}
 
         {/* Shift Success Notification Banner when Daily Goal is Reached */}
         {uiMode === 'playing' && (
@@ -1585,25 +1626,24 @@ export default function App() {
           />
         )}
 
-        {/* Slim Corner Quick-Action Buttons */}
+        {/* Unobstructed 4-Button Bottom-Right Quick-Bar */}
         {uiMode === 'playing' && (
           <div className="pointer-events-none absolute bottom-2 right-2.5 z-10">
             <FloatingCanvasQuickBar
               hud={hud}
-              cameraZoom={cameraZoom}
-              onZoomIn={handleZoomIn}
-              onZoomOut={handleZoomOut}
-              onResetZoom={handleResetZoom}
               onSmartStep={handleSmartStep}
               onWaterAllDaisies={handleWaterAllDaisies}
               onHireStaff={handleHireStaff}
-              onOpenBizModal={() => setShowBizModal(true)}
               onPetCats={() => handlePetCat()}
-              onToggleRoom={() => handleToggleRoom()}
             />
           </div>
         )}
       </div>
+
+      {/* Mobile Portrait Orientation Prompt Overlay */}
+      {isMobilePortrait && !portraitDismissed && (
+        <RotateLandscapeOverlay onDismiss={() => setPortraitDismissed(true)} />
+      )}
 
       {/* Collapsible External Bottom GBA Action Dock (Hidden by Default) */}
       {uiMode !== 'boot' && uiMode !== 'title' && (
