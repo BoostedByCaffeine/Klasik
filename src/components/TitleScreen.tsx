@@ -131,7 +131,7 @@ export const BootLoadingScreen: React.FC<BootScreenProps> = ({ onComplete }) => 
           className="pt-1 flex items-center justify-center w-full"
         >
           <img
-            src="/assets/aistudio/studiologo_ccccb57c.svg"
+            src="./assets/aistudio/studiologo_ccccb57c.svg"
             alt="BoostedByCaffeine Studios"
             className="h-9 w-auto object-contain"
           />
@@ -226,7 +226,7 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
           className="pt-2.5 border-t-2 border-[#262f40] w-full flex items-center justify-center"
         >
           <img
-            src="/assets/aistudio/studiologo_ccccb57c.svg"
+            src="./assets/aistudio/studiologo_ccccb57c.svg"
             alt="BoostedByCaffeine Studios"
             className="h-10 sm:h-11 w-auto object-contain"
           />

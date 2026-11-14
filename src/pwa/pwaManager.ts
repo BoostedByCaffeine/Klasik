@@ -10,43 +10,74 @@ export const RED_COFFEE_CUP_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewB
 
 export const RED_COFFEE_CUP_DATA_URI = `data:image/svg+xml;utf8,${encodeURIComponent(RED_COFFEE_CUP_SVG)}`;
 
-export const KLASIK_MANIFEST_OBJECT = {
-  id: '/',
-  name: 'Klasik — Garage Garden Cafe',
-  short_name: 'Klasik Cafe',
-  description:
-    'A cozy Gameboy Advance pixel-art Garden Garage Cafe management game featuring a 1990 Mazda Miata MX-5, Lilo & Champy cats, and realistic coffee prep.',
-  start_url: './',
-  scope: './',
-  display: 'standalone',
-  orientation: 'landscape',
-  background_color: '#07090e',
-  theme_color: '#dc2626',
-  icons: [
-    {
-      src: RED_COFFEE_CUP_DATA_URI,
-      sizes: '192x192 512x512',
-      type: 'image/svg+xml',
-      purpose: 'any',
-    },
-    {
-      src: RED_COFFEE_CUP_DATA_URI,
-      sizes: '512x512',
-      type: 'image/svg+xml',
-      purpose: 'maskable',
-    },
-  ],
-};
+export function buildKlasikManifestObject() {
+  const startUrl =
+    typeof window !== 'undefined' && window.location?.href ? window.location.href : './';
+  let scopeUrl = './';
+  try {
+    if (typeof window !== 'undefined' && window.location?.href) {
+      scopeUrl = new URL('./', window.location.href).href;
+    }
+  } catch {
+    scopeUrl = './';
+  }
 
-export const KLASIK_MANIFEST_JSON_STRING = JSON.stringify(KLASIK_MANIFEST_OBJECT, null, 2);
+  return {
+    name: 'Klasik — Garage Garden Cafe',
+    short_name: 'Klasik Cafe',
+    description:
+      'A cozy Gameboy Advance pixel-art Garden Garage Cafe management game featuring a 1990 Mazda Miata MX-5, Lilo & Champy cats, and realistic coffee prep.',
+    start_url: startUrl,
+    scope: scopeUrl,
+    display: 'standalone',
+    orientation: 'landscape',
+    background_color: '#0b0d12',
+    theme_color: '#dc2626',
+    icons: [
+      {
+        src: RED_COFFEE_CUP_DATA_URI,
+        sizes: '192x192 512x512',
+        type: 'image/svg+xml',
+        purpose: 'any',
+      },
+      {
+        src: RED_COFFEE_CUP_DATA_URI,
+        sizes: '512x512',
+        type: 'image/svg+xml',
+        purpose: 'maskable',
+      },
+    ],
+  };
+}
 
-export const KLASIK_SW_JS_SOURCE = `const CACHE_NAME = 'klasik-cafe-pwa-v2';
+export const KLASIK_MANIFEST_OBJECT = buildKlasikManifestObject();
+
+export const KLASIK_MANIFEST_JSON_STRING = JSON.stringify(
+  {
+    ...KLASIK_MANIFEST_OBJECT,
+    start_url: './',
+    scope: './',
+  },
+  null,
+  2
+);
+
+export const KLASIK_SW_JS_SOURCE = `const CACHE_NAME = 'klasik-cafe-pwa-v3';
 const PRECACHE_URLS = ['./', './index.html', './manifest.json'];
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(PRECACHE_URLS).catch(() => {}))
+    caches.open(CACHE_NAME).then(async (cache) => {
+      for (const url of PRECACHE_URLS) {
+        try {
+          const res = await fetch(url, { cache: 'no-cache' });
+          if (res && res.ok && res.status === 200) {
+            await cache.put(url, res);
+          }
+        } catch {}
+      }
+    })
   );
 });
 
@@ -60,11 +91,25 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
+  if (event.request.mode === 'navigate' || (event.request.headers.get('accept') || '').includes('text/html')) {
+    event.respondWith(
+      fetch(event.request)
+        .then((res) => {
+          if (res && res.ok && res.status === 200) {
+            const copy = res.clone();
+            caches.open(CACHE_NAME).then((c) => c.put(event.request, copy).catch(() => {}));
+          }
+          return res;
+        })
+        .catch(() => caches.match(event.request).then((r) => r || caches.match('./index.html') || caches.match('./')))
+    );
+    return;
+  }
   event.respondWith(
     caches.match(event.request).then((cached) => {
       const networked = fetch(event.request)
         .then((res) => {
-          if (res && (res.status === 200 || res.type === 'opaque')) {
+          if (res && res.ok && res.status === 200) {
             const copy = res.clone();
             caches.open(CACHE_NAME).then((c) => c.put(event.request, copy).catch(() => {}));
           }
@@ -91,7 +136,8 @@ export function triggerHaptic(durationMs = 15): void {
 }
 
 /**
- * Attaches an inline Blob Web App Manifest (if needed) and registers the offline Service Worker
+ * Attaches an inline Blob Web App Manifest (with absolute start_url & scope so Blob URLs never error)
+ * and safely registers `./sw.js` only if it exists on the server, purging stale v1/v2 caches.
  */
 export async function initKlasikPwa(): Promise<{
   swRegistered: boolean;
@@ -103,7 +149,8 @@ export async function initKlasikPwa(): Promise<{
 
   let manifestAttached = false;
   try {
-    const manifestBlob = new Blob([KLASIK_MANIFEST_JSON_STRING], {
+    const dynamicManifest = buildKlasikManifestObject();
+    const manifestBlob = new Blob([JSON.stringify(dynamicManifest, null, 2)], {
       type: 'application/manifest+json',
     });
     const manifestUrl = URL.createObjectURL(manifestBlob);
@@ -113,29 +160,38 @@ export async function initKlasikPwa(): Promise<{
       linkEl.rel = 'manifest';
       document.head.appendChild(linkEl);
     }
-    // Keep /manifest.json if served over HTTP(S), or attach Blob URL for file:// / standalone
-    if (window.location.protocol === 'file:') {
-      linkEl.href = manifestUrl;
-    }
+    linkEl.href = manifestUrl;
     manifestAttached = true;
   } catch {
     manifestAttached = false;
   }
 
+  // Self-healing cache purge for legacy v1/v2 caches that may hold stale subpath entries
+  try {
+    if ('caches' in window) {
+      const keys = await caches.keys();
+      await Promise.all(
+        keys
+          .filter((k) => k.startsWith('klasik-cafe-pwa-') && k !== 'klasik-cafe-pwa-v3')
+          .map((k) => caches.delete(k))
+      );
+    }
+  } catch {
+    // Ignore cache cleanup errors
+  }
+
   let swRegistered = false;
   if ('serviceWorker' in navigator && window.location.protocol.startsWith('http')) {
     try {
-      const reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
-      swRegistered = Boolean(reg);
-    } catch {
-      try {
-        const swBlob = new Blob([KLASIK_SW_JS_SOURCE], { type: 'application/javascript' });
-        const swUrl = URL.createObjectURL(swBlob);
-        const reg = await navigator.serviceWorker.register(swUrl);
+      const headRes = await fetch('./sw.js', { method: 'HEAD', cache: 'no-store' });
+      const contentType = headRes.headers.get('content-type') || '';
+      if (headRes.ok && !contentType.includes('text/html')) {
+        const reg = await navigator.serviceWorker.register('./sw.js', { scope: './' });
+        void reg.update().catch(() => {});
         swRegistered = Boolean(reg);
-      } catch {
-        swRegistered = false;
       }
+    } catch {
+      swRegistered = false;
     }
   }
 
