@@ -507,6 +507,40 @@ export interface CustomerEntity {
   pet: CustomerPartyPet | null;
   isTakeout?: boolean;
   isGarageVisitor?: boolean;
+  emoteText?: string | null;
+  emoteTimer?: number;
+  lastPatienceStage?: number;
+}
+
+export type CustomerEmoteTrigger =
+  | 'patience_calm'
+  | 'patience_alert'
+  | 'patience_urgent'
+  | 'order_received';
+
+export const CUSTOMER_EMOTE_POOLS: Record<CustomerEmoteTrigger, string[]> = {
+  patience_calm: ['?', '♪', '☕'],
+  patience_alert: ['!', '?', '!!'],
+  patience_urgent: ['!!!', '!!', '!'],
+  order_received: ['!', '!!', '♥', '♪', '★'],
+};
+
+export function getCustomerPatiencePct(cust: CustomerEntity, elapsedSeconds: number): number {
+  const waitElapsed = Math.max(0, elapsedSeconds - cust.arrivalTime);
+  return Math.max(0.25, Math.min(1, 1 - (waitElapsed % 45) / 60));
+}
+
+export function spawnCustomerEmote(
+  cust: CustomerEntity,
+  trigger: CustomerEmoteTrigger,
+  rand: () => number = Math.random
+): string {
+  const pool = CUSTOMER_EMOTE_POOLS[trigger] ?? CUSTOMER_EMOTE_POOLS.patience_alert;
+  const idx = Math.max(0, Math.min(pool.length - 1, Math.floor(rand() * pool.length)));
+  const chosen = pool[idx];
+  cust.emoteText = chosen;
+  cust.emoteTimer = trigger === 'order_received' ? 2.8 : 2.4;
+  return chosen;
 }
 
 export interface DatingCouple {
@@ -1413,6 +1447,9 @@ export function createCustomerParty(
     partySize: 1 + companions.length,
     companions,
     pet,
+    emoteText: startAtSlot ? '?' : null,
+    emoteTimer: startAtSlot ? 2.2 : 0,
+    lastPatienceStage: 0,
   };
 }
 
@@ -1432,12 +1469,62 @@ export function formatRealClock(date: Date = new Date()): string {
   return `${hours}:${minStr} ${ampm}`;
 }
 
+export interface Camera2D {
+  zoom: number; // Clamped 1.0 .. 2.6
+  panX: number; // World X at center of camera view
+  panY: number; // World Y at center of camera view
+}
+
+export function clampCamera2D(
+  cam: Camera2D,
+  worldW = 900,
+  worldH = 480
+): Camera2D {
+  const zoom = Math.max(1.0, Math.min(2.6, Number.isFinite(cam.zoom) ? cam.zoom : 1.0));
+  if (zoom <= 1.001) {
+    return {
+      zoom: 1.0,
+      panX: worldW / 2,
+      panY: worldH / 2,
+    };
+  }
+  const halfVisW = worldW / 2 / zoom;
+  const halfVisH = worldH / 2 / zoom;
+  const minX = Math.min(worldW / 2, halfVisW);
+  const maxX = Math.max(worldW / 2, worldW - halfVisW);
+  const minY = Math.min(worldH / 2, halfVisH);
+  const maxY = Math.max(worldH / 2, worldH - halfVisH);
+  return {
+    zoom: Number(zoom.toFixed(3)),
+    panX: Math.max(minX, Math.min(maxX, cam.panX)),
+    panY: Math.max(minY, Math.min(maxY, cam.panY)),
+  };
+}
+
+export function getDefaultCameraForViewport(
+  viewportW: number,
+  viewportH: number,
+  room: RoomId = 'inside',
+  worldW = 900,
+  worldH = 480
+): Camera2D {
+  const isPortrait = viewportH > viewportW;
+  if (!isPortrait) {
+    return { zoom: 1.0, panX: worldW / 2, panY: worldH / 2 };
+  }
+  // Portrait smart auto-zoom (1.55x) centered on Espresso Bar & Counter (inside) or Well & Daisy Beds (garden)
+  const focusX = room === 'inside' ? 296 : 450;
+  const focusY = room === 'inside' ? 220 : 254;
+  return clampCamera2D({ zoom: 1.55, panX: focusX, panY: focusY }, worldW, worldH);
+}
+
 export function screenToWorldContain(
   clientX: number,
   clientY: number,
   rect: { left: number; top: number; width: number; height: number },
   worldW = 900,
-  worldH = 480
+  worldH = 480,
+  camera?: Camera2D
 ): { x: number; y: number } {
   if (rect.width <= 0 || rect.height <= 0) return { x: 0, y: 0 };
   const scale = Math.min(rect.width / worldW, rect.height / worldH);
@@ -1449,8 +1536,21 @@ export function screenToWorldContain(
   const localX = clientX - rect.left - offsetX;
   const localY = clientY - rect.top - offsetY;
 
-  const worldX = Math.max(0, Math.min(worldW, (localX / renderedW) * worldW));
-  const worldY = Math.max(0, Math.min(worldH, (localY / renderedH) * worldH));
+  const canvasX = (localX / renderedW) * worldW;
+  const canvasY = (localY / renderedH) * worldH;
+
+  if (camera && camera.zoom > 1.001) {
+    const clampedCam = clampCamera2D(camera, worldW, worldH);
+    const invertedX = (canvasX - worldW / 2) / clampedCam.zoom + clampedCam.panX;
+    const invertedY = (canvasY - worldH / 2) / clampedCam.zoom + clampedCam.panY;
+    return {
+      x: Math.max(0, Math.min(worldW, invertedX)),
+      y: Math.max(0, Math.min(worldH, invertedY)),
+    };
+  }
+
+  const worldX = Math.max(0, Math.min(worldW, canvasX));
+  const worldY = Math.max(0, Math.min(worldH, canvasY));
   return { x: worldX, y: worldY };
 }
 
@@ -2418,10 +2518,38 @@ export function advanceCustomersSimulation(state: CafeState, dt: number): boolea
     }
 
     const distToFinal = Math.hypot(c.targetX - c.x, c.targetY - c.y);
+    if (c.emoteTimer && c.emoteTimer > 0) {
+      c.emoteTimer = Math.max(0, c.emoteTimer - dt);
+      if (c.emoteTimer === 0) {
+        c.emoteText = null;
+      }
+    }
+
+    if (c.state === 'waiting') {
+      const patiencePct = getCustomerPatiencePct(c, state.elapsedSeconds);
+      const stage = patiencePct <= 0.35 ? 3 : patiencePct <= 0.65 ? 2 : 1;
+      if (c.lastPatienceStage !== stage) {
+        c.lastPatienceStage = stage;
+        if (stage === 3) {
+          spawnCustomerEmote(c, 'patience_urgent');
+        } else if (stage === 2) {
+          spawnCustomerEmote(c, 'patience_alert');
+        } else {
+          spawnCustomerEmote(c, 'patience_calm');
+        }
+      } else if ((!c.emoteTimer || c.emoteTimer <= 0) && Math.floor(state.elapsedSeconds * 2) % 13 === 0) {
+        spawnCustomerEmote(
+          c,
+          stage === 3 ? 'patience_urgent' : stage === 2 ? 'patience_alert' : 'patience_calm'
+        );
+      }
+    }
+
     if (moveRes.reachedFinal || distToFinal <= 4) {
       if (c.state === 'walking_in') {
         c.state = 'waiting';
         c.facing = 'up';
+        spawnCustomerEmote(c, 'patience_calm');
         hudChanged = true;
       } else if (c.state === 'walking_to_garden') {
         // Reached the South Doorway (`▼ TO GARDEN`) inside! Transition into the Backyard Garden via the North Veranda Doorway!
@@ -3001,6 +3129,8 @@ export function serveWaitingCustomer(state: CafeState, fromAutoStaff = false): S
 
   waitingCustomer.heartsGiven = heartsEarned;
   waitingCustomer.carryingCup = true;
+  // Spawn randomized order-received dialogue bubble emote ('!', '!!', '♥', '♪', '★')
+  spawnCustomerEmote(waitingCustomer, 'order_received');
   // 20 to 30 seconds realistic table dining duration
   waitingCustomer.sipTimer = 22 + (state.servedCount % 9);
   waitingCustomer.sipBubbleTimer = 3.2;

@@ -181,7 +181,7 @@ export const CustomizeModal: React.FC<CustomizeModalProps> = ({
                 type="button"
                 data-testid="cycle-hair-btn"
                 onClick={() => setHairColorIndex((i) => (i + 1) % HAIR_COLORS.length)}
-                className="gba-btn px-2.5 py-1.5 text-[8px] text-[#facc15] cursor-pointer whitespace-nowrap"
+                className="gba-btn min-h-[42px] sm:min-h-[34px] px-2.5 py-1.5 text-[8px] text-[#facc15] cursor-pointer whitespace-nowrap"
               >
                 CYCLE ►
               </button>
@@ -205,7 +205,7 @@ export const CustomizeModal: React.FC<CustomizeModalProps> = ({
                 type="button"
                 data-testid="cycle-skin-btn"
                 onClick={() => setSkinToneIndex((i) => (i + 1) % SKIN_TONES.length)}
-                className="gba-btn px-2.5 py-1.5 text-[8px] text-[#facc15] cursor-pointer whitespace-nowrap"
+                className="gba-btn min-h-[42px] sm:min-h-[34px] px-2.5 py-1.5 text-[8px] text-[#facc15] cursor-pointer whitespace-nowrap"
               >
                 CYCLE ►
               </button>
@@ -247,7 +247,7 @@ export const CustomizeModal: React.FC<CustomizeModalProps> = ({
                   const next = BARISTA_OUTFITS[(currentOutfitIdx + 1) % BARISTA_OUTFITS.length];
                   setOutfitStyleId(next.id);
                 }}
-                className="gba-btn px-2.5 py-1.5 text-[8px] text-[#facc15] cursor-pointer whitespace-nowrap"
+                className="gba-btn min-h-[42px] sm:min-h-[34px] px-2.5 py-1.5 text-[8px] text-[#facc15] cursor-pointer whitespace-nowrap"
               >
                 CYCLE ►
               </button>
@@ -304,7 +304,7 @@ export const CustomizeModal: React.FC<CustomizeModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="gba-btn px-3.5 py-2 text-[9px] cursor-pointer"
+            className="gba-btn min-h-[42px] sm:min-h-[36px] px-3.5 py-2 text-[9px] cursor-pointer"
           >
             CANCEL
           </button>
@@ -312,7 +312,7 @@ export const CustomizeModal: React.FC<CustomizeModalProps> = ({
             type="submit"
             disabled={!isCurrentUnlocked}
             data-testid="save-customize-btn"
-            className={`gba-btn px-4 py-2 text-[9px] ${
+            className={`gba-btn min-h-[42px] sm:min-h-[36px] px-4 py-2 text-[9px] ${
               isCurrentUnlocked
                 ? 'gba-btn-active cursor-pointer'
                 : 'opacity-50 cursor-not-allowed text-[#fca5a5]'

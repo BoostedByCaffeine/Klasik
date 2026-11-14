@@ -48,6 +48,9 @@ import {
   stepAlongWaypoints,
   completeShift,
   screenToWorldContain,
+  Camera2D,
+  clampCamera2D,
+  getDefaultCameraForViewport,
   formatRealClock,
   resetCafeProgressV2,
 } from './game/rules';
@@ -170,6 +173,58 @@ export default function App() {
   const [swRegistered, setSwRegistered] = useState<boolean>(false);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
 
+  const cameraRef = useRef<Camera2D>(
+    typeof window !== 'undefined'
+      ? getDefaultCameraForViewport(window.innerWidth, window.innerHeight, 'inside')
+      : { zoom: 1, panX: WORLD_WIDTH / 2, panY: WORLD_HEIGHT / 2 }
+  );
+  const [cameraZoom, setCameraZoom] = useState<number>(() => cameraRef.current.zoom);
+  const activePointersRef = useRef<Map<number, { x: number; y: number }>>(new Map());
+  const pinchStartDistRef = useRef<number | null>(null);
+  const pinchStartZoomRef = useRef<number>(1);
+  const dragStateRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startY: number;
+    startPanX: number;
+    startPanY: number;
+    maxDist: number;
+  } | null>(null);
+  const lastTapTimeRef = useRef<number>(0);
+
+  const applyCamera = useCallback((next: Camera2D) => {
+    const clamped = clampCamera2D(next, WORLD_WIDTH, WORLD_HEIGHT);
+    cameraRef.current = clamped;
+    setCameraZoom(clamped.zoom);
+  }, []);
+
+  const handleZoomIn = useCallback(() => {
+    applyCamera({
+      ...cameraRef.current,
+      zoom: Number((cameraRef.current.zoom + 0.25).toFixed(2)),
+    });
+  }, [applyCamera]);
+
+  const handleZoomOut = useCallback(() => {
+    applyCamera({
+      ...cameraRef.current,
+      zoom: Number((cameraRef.current.zoom - 0.25).toFixed(2)),
+    });
+  }, [applyCamera]);
+
+  const handleResetZoom = useCallback(() => {
+    if (cameraRef.current.zoom > 1.03) {
+      applyCamera({ zoom: 1, panX: WORLD_WIDTH / 2, panY: WORLD_HEIGHT / 2 });
+    } else {
+      const room = gameStateRef.current.room;
+      applyCamera({
+        zoom: 1.55,
+        panX: room === 'inside' ? 296 : 450,
+        panY: room === 'inside' ? 220 : 254,
+      });
+    }
+  }, [applyCamera]);
+
   const updateHudIfChanged = useCallback((st: CafeState) => {
     const next = makeHudSnapshot(st);
     setHud(next);
@@ -191,6 +246,25 @@ export default function App() {
   useEffect(() => {
     document.body.dataset.state = autostart ? 'playing' : 'title';
   }, [autostart]);
+
+  useEffect(() => {
+    let lastPortrait = window.innerHeight > window.innerWidth;
+    const onResize = () => {
+      const isPortraitNow = window.innerHeight > window.innerWidth;
+      if (isPortraitNow !== lastPortrait) {
+        lastPortrait = isPortraitNow;
+        applyCamera(
+          getDefaultCameraForViewport(
+            window.innerWidth,
+            window.innerHeight,
+            gameStateRef.current.room
+          )
+        );
+      }
+    };
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, [applyCamera]);
 
   useEffect(() => {
     void initKlasikPwa().then((res) => {
@@ -665,11 +739,18 @@ export default function App() {
   const handleToggleRoom = useCallback(
     (targetRoom?: RoomId) => {
       const st = gameStateRef.current;
-      toggleRoom(st, targetRoom);
+      const nextRoom = toggleRoom(st, targetRoom);
+      if (cameraRef.current.zoom > 1.05) {
+        applyCamera({
+          zoom: cameraRef.current.zoom,
+          panX: nextRoom === 'inside' ? 296 : 450,
+          panY: nextRoom === 'inside' ? 220 : 254,
+        });
+      }
       soundEngine.playStep();
       syncHudNow();
     },
-    [syncHudNow]
+    [applyCamera, syncHudNow]
   );
 
   const handleCycleTimeOfDay = useCallback(() => {
@@ -690,7 +771,14 @@ export default function App() {
     const canvas = canvasRef.current;
     if (!canvas) return { x: 0, y: 0 };
     const rect = canvas.getBoundingClientRect();
-    return screenToWorldContain(clientX, clientY, rect, WORLD_WIDTH, WORLD_HEIGHT);
+    return screenToWorldContain(
+      clientX,
+      clientY,
+      rect,
+      WORLD_WIDTH,
+      WORLD_HEIGHT,
+      cameraRef.current
+    );
   }, []);
 
   useEffect(() => {
@@ -1104,7 +1192,8 @@ export default function App() {
             timeSec,
             hoveredStationRef.current,
             hoveredDaisyRef.current,
-            hoveredMiataRef.current
+            hoveredMiataRef.current,
+            cameraRef.current
           );
         }
       }
@@ -1124,7 +1213,191 @@ export default function App() {
     };
   }, [updateHudIfChanged]);
 
+  const handleWorldTap = useCallback(
+    (clientX: number, clientY: number) => {
+      const st = gameStateRef.current;
+      if (st.mode !== 'playing') return;
+
+      const { x, y } = screenToWorld(clientX, clientY);
+
+      for (const cat of st.cats) {
+        if (cat.room === st.room && Math.abs(x - cat.x) <= 28 && Math.abs(y - cat.y) <= 24) {
+          handlePetCat(cat.id);
+          return;
+        }
+      }
+
+      if (st.room === 'inside') {
+        if (
+          Math.abs(x - INSIDE_DOOR_MAT.x) <= INSIDE_DOOR_MAT.width / 2 + 6 &&
+          Math.abs(y - INSIDE_DOOR_MAT.y) <= INSIDE_DOOR_MAT.height / 2 + 6
+        ) {
+          handleToggleRoom('garden');
+          return;
+        }
+
+        if (
+          Math.abs(x - TIP_JAR_BOUNDS.x) <= TIP_JAR_BOUNDS.width / 2 + 8 &&
+          Math.abs(y - TIP_JAR_BOUNDS.y) <= TIP_JAR_BOUNDS.height / 2 + 8
+        ) {
+          handleCollectTipJar();
+          return;
+        }
+
+        if (
+          Math.abs(x - TOOL_CHEST_BOUNDS.x) <= TOOL_CHEST_BOUNDS.width / 2 + 8 &&
+          Math.abs(y - TOOL_CHEST_BOUNDS.y) <= TOOL_CHEST_BOUNDS.height / 2 + 8
+        ) {
+          handleCycleMiataPaint();
+          return;
+        }
+
+        if (Math.abs(x - 748) <= 68 && Math.abs(y - 328) <= 32) {
+          handlePhotoSquadSnap();
+          return;
+        }
+
+        if (
+          Math.abs(x - MIATA_GARAGE_BOUNDS.x) <= MIATA_GARAGE_BOUNDS.width / 2 &&
+          Math.abs(y - MIATA_GARAGE_BOUNDS.y) <= MIATA_GARAGE_BOUNDS.height / 2
+        ) {
+          handleToggleMiataHeadlights();
+          return;
+        }
+
+        const waitingCustomer = st.customers.find((c) => c.state === 'waiting');
+        if (
+          waitingCustomer &&
+          x >= waitingCustomer.x - 90 &&
+          x <= waitingCustomer.x + 220 &&
+          y >= waitingCustomer.y - 44 &&
+          y <= waitingCustomer.y + 36
+        ) {
+          handleSmartStep();
+          return;
+        }
+
+        for (const s of STATIONS) {
+          if (s.id === 'watering_can') continue;
+          if (Math.abs(x - s.x) <= s.width / 2 + 6 && Math.abs(y - s.y) <= s.height / 2 + 6) {
+            handleTriggerStation(s.id);
+            return;
+          }
+        }
+      } else {
+        if (
+          Math.abs(x - GARDEN_DOOR_MAT.x) <= GARDEN_DOOR_MAT.width / 2 + 6 &&
+          Math.abs(y - GARDEN_DOOR_MAT.y) <= GARDEN_DOOR_MAT.height / 2 + 6
+        ) {
+          handleToggleRoom('inside');
+          return;
+        }
+
+        if (
+          Math.abs(x - GARDEN_ORDER_WINDOW.x) <= GARDEN_ORDER_WINDOW.width / 2 + 6 &&
+          Math.abs(y - GARDEN_ORDER_WINDOW.y) <= GARDEN_ORDER_WINDOW.height / 2 + 6
+        ) {
+          handleSmartStep();
+          return;
+        }
+
+        const well = STATIONS.find((s) => s.id === 'watering_can');
+        if (
+          well &&
+          Math.abs(x - well.x) <= well.width / 2 + 8 &&
+          Math.abs(y - well.y) <= well.height / 2 + 8
+        ) {
+          handleWaterAllDaisies();
+          return;
+        }
+
+        for (const d of st.daisies) {
+          if (Math.abs(x - d.x) <= 54 && Math.abs(y - d.y) <= 34) {
+            handleWaterDaisyById(d.id);
+            return;
+          }
+        }
+      }
+
+      st.barista.targetX = Math.max(46, Math.min(854, x));
+      st.barista.targetY = Math.max(132, Math.min(442, y));
+      soundEngine.playStep();
+    },
+    [
+      screenToWorld,
+      handlePetCat,
+      handleToggleRoom,
+      handleCollectTipJar,
+      handleCycleMiataPaint,
+      handlePhotoSquadSnap,
+      handleToggleMiataHeadlights,
+      handleSmartStep,
+      handleTriggerStation,
+      handleWaterAllDaisies,
+      handleWaterDaisyById,
+    ]
+  );
+
+  const handleCanvasWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
+    const zoomDelta = -e.deltaY * 0.0014;
+    if (Math.abs(zoomDelta) < 0.005) return;
+    const targetWorld = screenToWorld(e.clientX, e.clientY);
+    const nextZoom = Math.max(1.0, Math.min(2.6, cameraRef.current.zoom + zoomDelta));
+    applyCamera({
+      zoom: Number(nextZoom.toFixed(2)),
+      panX:
+        cameraRef.current.panX +
+        (targetWorld.x - cameraRef.current.panX) * (zoomDelta > 0 ? 0.18 : 0),
+      panY:
+        cameraRef.current.panY +
+        (targetWorld.y - cameraRef.current.panY) * (zoomDelta > 0 ? 0.18 : 0),
+    });
+  };
+
   const handleCanvasPointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (activePointersRef.current.has(e.pointerId)) {
+      activePointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    }
+
+    if (activePointersRef.current.size >= 2 && pinchStartDistRef.current) {
+      const pts = Array.from(activePointersRef.current.values());
+      const dist = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
+      if (dist > 8) {
+        const nextZoom = pinchStartZoomRef.current * (dist / pinchStartDistRef.current);
+        applyCamera({
+          ...cameraRef.current,
+          zoom: Number(nextZoom.toFixed(2)),
+        });
+      }
+      return;
+    }
+
+    const drag = dragStateRef.current;
+    if (drag && drag.pointerId === e.pointerId) {
+      const dx = e.clientX - drag.startX;
+      const dy = e.clientY - drag.startY;
+      const dist = Math.hypot(dx, dy);
+      drag.maxDist = Math.max(drag.maxDist, dist);
+
+      if (cameraRef.current.zoom > 1.05 && drag.maxDist >= 4) {
+        const canvas = canvasRef.current;
+        if (canvas) {
+          const rect = canvas.getBoundingClientRect();
+          const scaleX = rect.width / WORLD_WIDTH;
+          const scaleY = rect.height / WORLD_HEIGHT;
+          const baseScale = Math.max(0.05, Math.min(scaleX, scaleY));
+          const worldDx = dx / (baseScale * cameraRef.current.zoom);
+          const worldDy = dy / (baseScale * cameraRef.current.zoom);
+          applyCamera({
+            zoom: cameraRef.current.zoom,
+            panX: drag.startPanX - worldDx,
+            panY: drag.startPanY - worldDy,
+          });
+        }
+        return;
+      }
+    }
+
     const { x, y } = screenToWorld(e.clientX, e.clientY);
     const st = gameStateRef.current;
 
@@ -1165,114 +1438,75 @@ export default function App() {
     const st = gameStateRef.current;
     if (st.mode !== 'playing') return;
 
-    const { x, y } = screenToWorld(e.clientX, e.clientY);
+    activePointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
-    for (const cat of st.cats) {
-      if (cat.room === st.room && Math.abs(x - cat.x) <= 28 && Math.abs(y - cat.y) <= 24) {
-        handlePetCat(cat.id);
-        return;
-      }
+    if (activePointersRef.current.size >= 2) {
+      const pts = Array.from(activePointersRef.current.values());
+      pinchStartDistRef.current = Math.max(
+        10,
+        Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y)
+      );
+      pinchStartZoomRef.current = cameraRef.current.zoom;
+      dragStateRef.current = null;
+      return;
     }
 
-    if (st.room === 'inside') {
-      if (
-        Math.abs(x - INSIDE_DOOR_MAT.x) <= INSIDE_DOOR_MAT.width / 2 + 6 &&
-        Math.abs(y - INSIDE_DOOR_MAT.y) <= INSIDE_DOOR_MAT.height / 2 + 6
-      ) {
-        handleToggleRoom('garden');
-        return;
-      }
+    dragStateRef.current = {
+      pointerId: e.pointerId,
+      startX: e.clientX,
+      startY: e.clientY,
+      startPanX: cameraRef.current.panX,
+      startPanY: cameraRef.current.panY,
+      maxDist: 0,
+    };
 
-      if (
-        Math.abs(x - TIP_JAR_BOUNDS.x) <= TIP_JAR_BOUNDS.width / 2 + 8 &&
-        Math.abs(y - TIP_JAR_BOUNDS.y) <= TIP_JAR_BOUNDS.height / 2 + 8
-      ) {
-        handleCollectTipJar();
-        return;
-      }
+    // When unzoomed (<= 1.05x), trigger station/entity tap immediately on pointerdown
+    if (cameraRef.current.zoom <= 1.05) {
+      handleWorldTap(e.clientX, e.clientY);
+    }
+  };
 
-      if (
-        Math.abs(x - TOOL_CHEST_BOUNDS.x) <= TOOL_CHEST_BOUNDS.width / 2 + 8 &&
-        Math.abs(y - TOOL_CHEST_BOUNDS.y) <= TOOL_CHEST_BOUNDS.height / 2 + 8
-      ) {
-        handleCycleMiataPaint();
-        return;
-      }
+  const handleCanvasPointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    activePointersRef.current.delete(e.pointerId);
+    if (activePointersRef.current.size < 2) {
+      pinchStartDistRef.current = null;
+    }
 
-      if (Math.abs(x - 748) <= 68 && Math.abs(y - 328) <= 32) {
-        handlePhotoSquadSnap();
-        return;
-      }
-
-      if (
-        Math.abs(x - MIATA_GARAGE_BOUNDS.x) <= MIATA_GARAGE_BOUNDS.width / 2 &&
-        Math.abs(y - MIATA_GARAGE_BOUNDS.y) <= MIATA_GARAGE_BOUNDS.height / 2
-      ) {
-        handleToggleMiataHeadlights();
-        return;
-      }
-
-      const waitingCustomer = st.customers.find((c) => c.state === 'waiting');
-      if (
-        waitingCustomer &&
-        x >= waitingCustomer.x - 90 &&
-        x <= waitingCustomer.x + 220 &&
-        y >= waitingCustomer.y - 44 &&
-        y <= waitingCustomer.y + 36
-      ) {
-        handleSmartStep();
-        return;
-      }
-
-      for (const s of STATIONS) {
-        if (s.id === 'watering_can') continue;
-        if (Math.abs(x - s.x) <= s.width / 2 + 6 && Math.abs(y - s.y) <= s.height / 2 + 6) {
-          handleTriggerStation(s.id);
+    const drag = dragStateRef.current;
+    if (drag && drag.pointerId === e.pointerId) {
+      dragStateRef.current = null;
+      if (drag.maxDist < 8) {
+        const now = performance.now();
+        if (now - lastTapTimeRef.current < 260 && e.pointerType === 'touch') {
+          const worldPt = screenToWorld(e.clientX, e.clientY);
+          if (cameraRef.current.zoom > 1.08) {
+            applyCamera({ zoom: 1, panX: WORLD_WIDTH / 2, panY: WORLD_HEIGHT / 2 });
+          } else {
+            applyCamera({ zoom: 1.75, panX: worldPt.x, panY: worldPt.y });
+          }
+          lastTapTimeRef.current = 0;
           return;
         }
-      }
-    } else {
-      if (
-        Math.abs(x - GARDEN_DOOR_MAT.x) <= GARDEN_DOOR_MAT.width / 2 + 6 &&
-        Math.abs(y - GARDEN_DOOR_MAT.y) <= GARDEN_DOOR_MAT.height / 2 + 6
-      ) {
-        handleToggleRoom('inside');
-        return;
-      }
-
-      if (
-        Math.abs(x - GARDEN_ORDER_WINDOW.x) <= GARDEN_ORDER_WINDOW.width / 2 + 6 &&
-        Math.abs(y - GARDEN_ORDER_WINDOW.y) <= GARDEN_ORDER_WINDOW.height / 2 + 6
-      ) {
-        handleSmartStep();
-        return;
-      }
-
-      const well = STATIONS.find((s) => s.id === 'watering_can');
-      if (
-        well &&
-        Math.abs(x - well.x) <= well.width / 2 + 8 &&
-        Math.abs(y - well.y) <= well.height / 2 + 8
-      ) {
-        handleWaterAllDaisies();
-        return;
-      }
-
-      for (const d of st.daisies) {
-        if (Math.abs(x - d.x) <= 54 && Math.abs(y - d.y) <= 34) {
-          handleWaterDaisyById(d.id);
-          return;
+        lastTapTimeRef.current = now;
+        if (cameraRef.current.zoom > 1.05) {
+          handleWorldTap(e.clientX, e.clientY);
         }
       }
     }
+  };
 
-    st.barista.targetX = Math.max(46, Math.min(854, x));
-    st.barista.targetY = Math.max(132, Math.min(442, y));
-    soundEngine.playStep();
+  const handleCanvasPointerCancel = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    activePointersRef.current.delete(e.pointerId);
+    if (activePointersRef.current.size < 2) {
+      pinchStartDistRef.current = null;
+    }
+    if (dragStateRef.current?.pointerId === e.pointerId) {
+      dragStateRef.current = null;
+    }
   };
 
   return (
-    <main className="relative w-screen h-dvh overflow-hidden bg-[#0b0d12] flex flex-col justify-between">
+    <main className="relative w-screen h-dvh overflow-hidden bg-[#090b10] flex flex-col justify-between">
       {/* External Top GBA Status HUD Bar */}
       {uiMode !== 'boot' && uiMode !== 'title' && (
         <TopHudBar
@@ -1280,6 +1514,8 @@ export default function App() {
           dockCollapsed={dockCollapsed}
           isStandalone={isStandalone}
           isFullscreen={isFullscreen}
+          cameraZoom={cameraZoom}
+          onResetZoom={handleResetZoom}
           onToggleFullscreen={handleToggleFullscreen}
           onToggleDock={() => setDockCollapsed((prev) => !prev)}
           onToggleBgm={() => {
@@ -1320,16 +1556,20 @@ export default function App() {
       )}
 
       {/* Dedicated Non-Overlapping GBA Pixel-Art Viewport Stage */}
-      <div className="relative flex-1 min-h-0 w-full flex items-center justify-center p-1 bg-[#0b0d12]">
+      <div className="relative flex-1 min-h-0 w-full flex items-center justify-center p-1 bg-[#090b10]">
         <canvas
           ref={canvasRef}
           data-testid="klasik-canvas"
           width={WORLD_WIDTH}
           height={WORLD_HEIGHT}
+          onWheel={handleCanvasWheel}
           onPointerMove={handleCanvasPointerMove}
           onPointerDown={handleCanvasPointerDown}
+          onPointerUp={handleCanvasPointerUp}
+          onPointerCancel={handleCanvasPointerCancel}
+          onPointerLeave={handleCanvasPointerCancel}
           className="w-full h-full object-contain cursor-pointer border-[3px] border-[#334155]"
-          style={{ imageRendering: 'pixelated' }}
+          style={{ imageRendering: 'pixelated', touchAction: 'none' }}
         />
 
         {/* Shift Success Notification Banner when Daily Goal is Reached */}
@@ -1350,6 +1590,10 @@ export default function App() {
           <div className="pointer-events-none absolute bottom-2 right-2.5 z-10">
             <FloatingCanvasQuickBar
               hud={hud}
+              cameraZoom={cameraZoom}
+              onZoomIn={handleZoomIn}
+              onZoomOut={handleZoomOut}
+              onResetZoom={handleResetZoom}
               onSmartStep={handleSmartStep}
               onWaterAllDaisies={handleWaterAllDaisies}
               onHireStaff={handleHireStaff}

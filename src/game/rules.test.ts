@@ -46,8 +46,79 @@ import {
   saveCafeProgressV2,
   loadCafeProgressV2,
   resetCafeProgressV2,
+  CUSTOMER_EMOTE_POOLS,
+  getCustomerPatiencePct,
+  spawnCustomerEmote,
+  clampCamera2D,
+  getDefaultCameraForViewport,
 } from './rules';
 import { isStandaloneApp } from '../pwa/pwaManager';
+
+test('customer dialogue bubble emotes spawn randomized emotes based on patience levels and order receipt', () => {
+  const state = createInitialCafeState(true);
+  const cust = state.customers[0];
+
+  // Initial waiting customer has high patience (> 65%)
+  assert.ok(getCustomerPatiencePct(cust, state.elapsedSeconds) > 0.65);
+
+  // Trigger calm patience emote
+  const calmEmote = spawnCustomerEmote(cust, 'patience_calm', () => 0.1);
+  assert.equal(CUSTOMER_EMOTE_POOLS.patience_calm.includes(calmEmote), true);
+  assert.equal(cust.emoteText, calmEmote);
+  assert.ok((cust.emoteTimer ?? 0) > 1.0);
+
+  // Advance elapsed time into alert zone (waitElapsed = 24s -> patiencePct = 0.60 -> stage 2)
+  state.elapsedSeconds = cust.arrivalTime + 24;
+  cust.lastPatienceStage = 1;
+  advanceCustomersSimulation(state, 0.1);
+  assert.equal(cust.lastPatienceStage, 2);
+  assert.equal(CUSTOMER_EMOTE_POOLS.patience_alert.includes(cust.emoteText!), true);
+
+  // Advance elapsed time into urgent zone (waitElapsed = 42s -> patiencePct = 0.30 -> stage 3)
+  state.elapsedSeconds = cust.arrivalTime + 42;
+  advanceCustomersSimulation(state, 0.1);
+  assert.equal(cust.lastPatienceStage, 3);
+  assert.equal(CUSTOMER_EMOTE_POOLS.patience_urgent.includes(cust.emoteText!), true);
+
+  // Serving customer triggers order_received emote ('!', '!!', '♥', '♪', '★')
+  state.prep.activeDrink = cust.order;
+  state.prep.currentStepIndex = 3;
+  const serveRes = serveWaitingCustomer(state);
+  assert.equal(serveRes.served, true);
+  assert.equal(
+    CUSTOMER_EMOTE_POOLS.order_received.includes(serveRes.customer!.emoteText!),
+    true
+  );
+  assert.ok((serveRes.customer!.emoteTimer ?? 0) >= 2.0);
+});
+
+test('2D pinch-to-zoom & pan camera clamps bounds, auto-zooms in portrait, and inverts world coordinates', () => {
+  // Portrait viewport defaults to 1.55x zoom centered on active room focus area
+  const portraitInside = getDefaultCameraForViewport(390, 844, 'inside');
+  assert.equal(portraitInside.zoom, 1.55);
+  assert.equal(portraitInside.panX, 296);
+  assert.equal(portraitInside.panY, 220);
+
+  // Landscape viewport defaults to 1.0x overview
+  const landscapeInside = getDefaultCameraForViewport(844, 390, 'inside');
+  assert.equal(landscapeInside.zoom, 1.0);
+  assert.equal(landscapeInside.panX, 450);
+  assert.equal(landscapeInside.panY, 240);
+
+  // Clamping camera keeps pan within world bounds
+  const clamped = clampCamera2D({ zoom: 2.0, panX: 50, panY: 20 }, 900, 480);
+  assert.equal(clamped.zoom, 2.0);
+  assert.equal(clamped.panX, 225); // halfViewW = 900 / 4 = 225
+  assert.equal(clamped.panY, 120); // halfViewH = 480 / 4 = 120
+
+  // screenToWorldContain inverts zoom & pan accurately
+  const rect = { left: 0, top: 0, width: 900, height: 480 };
+  const cam = { zoom: 2.0, panX: 300, panY: 200 };
+  // Clicking exact center of canvas (450, 240) maps to (panX, panY) = (300, 200)
+  const worldCenter = screenToWorldContain(450, 240, rect, 900, 480, cam);
+  assert.equal(Math.round(worldCenter.x), 300);
+  assert.equal(Math.round(worldCenter.y), 200);
+});
 
 test('automatic local save (klasik_cafe_save_v2) persists and restores progress and supports reset', () => {
   const store = new Map<string, string>();
@@ -456,4 +527,5 @@ test('isStandaloneApp accurately detects web browser vs. installed PWA and Andro
     delete g.document;
   }
 });
+
 

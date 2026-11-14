@@ -73,13 +73,13 @@ export const RecipeMenuModal: React.FC<RecipeMenuModalProps> = ({
             type="button"
             data-testid="close-recipe-menu-btn"
             onClick={onClose}
-            className="gba-btn px-2.5 py-1 text-[9px] cursor-pointer"
+            className="gba-btn min-h-[40px] sm:min-h-[32px] px-2.5 py-1 text-[9px] cursor-pointer"
           >
             ✕ ESC
           </button>
         </div>
 
-        <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+        <div className="mt-3 klasik-modal-grid">
           {drinkKeys.map((drinkId) => {
             const recipe = RECIPES[drinkId];
             const sellPrice = recipe.price + sleeveBonus + cozyBonus;

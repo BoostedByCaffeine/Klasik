@@ -62,7 +62,7 @@ export const KLASIK_MANIFEST_JSON_STRING = JSON.stringify(
   2
 );
 
-export const KLASIK_SW_JS_SOURCE = `const CACHE_NAME = 'klasik-vite-pwa-v3';
+export const KLASIK_SW_JS_SOURCE = `const CACHE_NAME = 'klasik-vite-pwa-v4';
 const PRECACHE_URLS = ['./', './index.html', './manifest.json', './icon.svg'];
 
 self.addEventListener('install', (event) => {
@@ -93,15 +93,21 @@ self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
   if (event.request.mode === 'navigate' || (event.request.headers.get('accept') || '').includes('text/html')) {
     event.respondWith(
-      fetch(event.request)
-        .then((res) => {
-          if (res && res.ok && res.status === 200) {
-            const copy = res.clone();
-            caches.open(CACHE_NAME).then((c) => c.put(event.request, copy).catch(() => {}));
-          }
-          return res;
-        })
-        .catch(() => caches.match(event.request).then((r) => r || caches.match('./index.html') || caches.match('./')))
+      caches.match(event.request).then((cachedNav) => {
+        const net = fetch(event.request)
+          .then((res) => {
+            if (res && res.ok && res.status === 200) {
+              const copy = res.clone();
+              caches.open(CACHE_NAME).then((c) => {
+                c.put(event.request, copy).catch(() => {});
+                c.put('./index.html', copy.clone()).catch(() => {});
+              });
+            }
+            return res;
+          })
+          .catch(() => cachedNav || caches.match('./index.html') || caches.match('./'));
+        return cachedNav || net;
+      })
     );
     return;
   }
@@ -166,7 +172,7 @@ export function isStandaloneApp(): boolean {
 
 /**
  * Attaches an inline Blob Web App Manifest (with absolute start_url & scope so Blob URLs never error)
- * and safely registers `./sw.js` only if it exists on the server, purging stale v1/v2 caches.
+ * and safely registers `./sw.js` only if it exists on the server, purging stale legacy caches.
  */
 export async function initKlasikPwa(): Promise<{
   swRegistered: boolean;
@@ -195,7 +201,7 @@ export async function initKlasikPwa(): Promise<{
     manifestAttached = false;
   }
 
-  // Self-healing cache purge for legacy v1/v2 caches that may hold stale subpath entries
+  // Self-healing cache purge for legacy v1/v2/v3 caches that may hold stale subpath entries
   try {
     if ('caches' in window) {
       const keys = await caches.keys();
@@ -204,7 +210,7 @@ export async function initKlasikPwa(): Promise<{
           .filter(
             (k) =>
               (k.startsWith('klasik-cafe-pwa-') || k.startsWith('klasik-vite-pwa-')) &&
-              k !== 'klasik-vite-pwa-v3'
+              k !== 'klasik-vite-pwa-v4'
           )
           .map((k) => caches.delete(k))
       );

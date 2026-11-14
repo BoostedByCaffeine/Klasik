@@ -1,4 +1,4 @@
-const CACHE_NAME = 'klasik-vite-pwa-v3';
+const CACHE_NAME = 'klasik-vite-pwa-v4';
 const PRECACHE_URLS = [
   './',
   './index.html',
@@ -42,22 +42,37 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
 
-  // Network-first for HTML document navigations so stale/empty caches never cause a white screen
-  if (event.request.mode === 'navigate' || (event.request.headers.get('accept') || '').includes('text/html')) {
+  // Navigation requests: serve cached shell immediately or update in background, falling back to ./index.html when offline
+  if (
+    event.request.mode === 'navigate' ||
+    (event.request.headers.get('accept') || '').includes('text/html')
+  ) {
     event.respondWith(
-      fetch(event.request)
-        .then((networkResponse) => {
-          if (networkResponse && networkResponse.ok && networkResponse.status === 200) {
-            const copy = networkResponse.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy).catch(() => {}));
-          }
-          return networkResponse;
-        })
-        .catch(() => caches.match(event.request).then((r) => r || caches.match('./index.html') || caches.match('./')))
+      caches.match(event.request).then((cachedNav) => {
+        const networkFetch = fetch(event.request)
+          .then((networkResponse) => {
+            if (networkResponse && networkResponse.ok && networkResponse.status === 200) {
+              const copy = networkResponse.clone();
+              caches.open(CACHE_NAME).then((cache) => {
+                cache.put(event.request, copy).catch(() => {});
+                cache.put('./index.html', copy.clone()).catch(() => {});
+              });
+            }
+            return networkResponse;
+          })
+          .catch(() =>
+            cachedNav ||
+            caches.match('./index.html') ||
+            caches.match('./')
+          );
+
+        return cachedNav || networkFetch;
+      })
     );
     return;
   }
 
+  // Static JS/CSS/SVG/JSON assets: Cache-First with background network refresh
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
       const fetchPromise = fetch(event.request)
@@ -80,3 +95,4 @@ self.addEventListener('fetch', (event) => {
     })
   );
 });
+

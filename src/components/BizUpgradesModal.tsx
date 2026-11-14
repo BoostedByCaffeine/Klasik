@@ -190,7 +190,7 @@ export const BizUpgradesModal: React.FC<BizUpgradesModalProps> = ({
                 data-testid="wholesale-auto-restock-toggle"
                 aria-pressed={Boolean(finance.autoRestock)}
                 onClick={onToggleAutoRestock}
-                className={`gba-btn px-2.5 py-1.5 text-[8px] cursor-pointer whitespace-nowrap ${
+                className={`gba-btn min-h-[42px] sm:min-h-[34px] px-2.5 py-1.5 text-[8px] cursor-pointer whitespace-nowrap ${
                   finance.autoRestock
                     ? 'bg-[#166534] text-[#86efac] border-[#4ade80]'
                     : 'text-[#cbd5e1]'
@@ -204,7 +204,7 @@ export const BizUpgradesModal: React.FC<BizUpgradesModalProps> = ({
               type="button"
               data-testid="wholesale-restock-btn"
               onClick={onRestockWholesale}
-              className={`gba-btn px-2.5 py-1.5 text-[8px] cursor-pointer whitespace-nowrap ${
+              className={`gba-btn min-h-[42px] sm:min-h-[34px] px-2.5 py-1.5 text-[8px] cursor-pointer whitespace-nowrap ${
                 canAffordRestock ? 'gba-btn-active' : 'opacity-75'
               }`}
             >
@@ -263,7 +263,7 @@ export const BizUpgradesModal: React.FC<BizUpgradesModalProps> = ({
             <div className="text-[8px] font-['Press_Start_2P'] text-[#fde047] mb-1.5">
               👩‍🍳 CAFE STAFF RECRUITMENT &amp; DAILY PAYROLL ($12/DAY SALARY)
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div className="klasik-modal-grid">
               {staff.map((worker) => {
                 const canAfford = coins >= worker.cost;
                 return (
@@ -319,7 +319,7 @@ export const BizUpgradesModal: React.FC<BizUpgradesModalProps> = ({
             <div className="text-[8px] font-['Press_Start_2P'] text-[#7dd3fc] mb-1.5">
               ⚙️ BAR EQUIPMENT EVOLUTION (LVL 1: 2.8s → LVL 2: 1.5s → LVL 3: 0.65s)
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+            <div className="klasik-modal-grid">
               {UPGRADABLE_STATIONS.map((st) => {
                 const currentTier = stationLevels[st.id] ?? 1;
                 const tierMeta = STATION_TIER_META[currentTier];
@@ -389,7 +389,7 @@ export const BizUpgradesModal: React.FC<BizUpgradesModalProps> = ({
             <div className="text-[8px] font-['Press_Start_2P'] text-[#86efac] mb-1.5">
               🎨 INTERIOR &amp; BACKYARD GARDEN DECOR SHOP (6 VISUAL UPGRADES)
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div className="klasik-modal-grid">
               {DECOR_SHOP_ITEMS.map((item) => {
                 const owned = Boolean(decorOwned[item.id]);
                 const equipped = Boolean(decorEquipped[item.id]);
@@ -451,7 +451,7 @@ export const BizUpgradesModal: React.FC<BizUpgradesModalProps> = ({
             <div className="text-[8px] font-['Press_Start_2P'] text-[#94a3b8] mb-1.5">
               📈 CAPITAL CONTRACTS &amp; MERCH UPGRADES (4)
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div className="klasik-modal-grid">
               {CAPITAL_UPGRADES.map((upg) => {
                 const owned = finance.upgrades[upg.id];
                 const canAfford = coins >= upg.cost;

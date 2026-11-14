@@ -60,6 +60,10 @@ interface TopHudBarProps {
   dockCollapsed: boolean;
   isStandalone?: boolean;
   isFullscreen?: boolean;
+  cameraZoom?: number;
+  onZoomIn?: () => void;
+  onZoomOut?: () => void;
+  onResetZoom?: () => void;
   onToggleFullscreen?: () => void;
   onToggleDock: () => void;
   onToggleBgm: () => void;
@@ -83,6 +87,10 @@ export const TopHudBar: React.FC<TopHudBarProps> = ({
   dockCollapsed,
   isStandalone = false,
   isFullscreen = false,
+  cameraZoom = 1,
+  onZoomIn,
+  onZoomOut,
+  onResetZoom,
   onToggleFullscreen,
   onToggleDock,
   onToggleBgm,
@@ -101,6 +109,7 @@ export const TopHudBar: React.FC<TopHudBarProps> = ({
   onFinishShift,
 }) => {
   const orderRecipe = hud.waitingCustomerOrder ? RECIPES[hud.waitingCustomerOrder] : null;
+  const [moreDrawerOpen, setMoreDrawerOpen] = useState(false);
 
   const roomLabels: Record<RoomId, string> = {
     inside: '🚪 INSIDE',
@@ -120,6 +129,7 @@ export const TopHudBar: React.FC<TopHudBarProps> = ({
   };
 
   const canAffordStaff = hud.nextStaffCost !== null && hud.coins >= hud.nextStaffCost;
+  const zoomPct = Math.round(cameraZoom * 100);
 
   const prevStreakRef = useRef(hud.dailyStreak);
   const pulseTimerRef = useRef<number | null>(null);
@@ -150,78 +160,78 @@ export const TopHudBar: React.FC<TopHudBarProps> = ({
   }, []);
 
   return (
-    <header className="klasik-top-hud w-full bg-[#0b0d12] border-b-[3px] border-[#f8fafc] px-2 py-1 shrink-0 flex flex-wrap items-center justify-between gap-1.5 overflow-x-hidden">
-      {/* Compact GBA Stat Strip + Daily Goal Progress Bar */}
-      <div className="gba-frame px-2 py-0.5 flex flex-wrap items-center gap-1.5 shrink-0">
+    <header className="klasik-top-hud relative z-30 w-full bg-[#090b10] border-b-[3px] border-[#f8fafc] px-1.5 sm:px-2 py-1 shrink-0 flex flex-wrap items-center justify-between gap-1 sm:gap-1.5">
+      {/* Compact GBA Stat Strip + Daily Goal Progress Bar (Wraps cleanly on narrow portrait screens < 640px) */}
+      <div className="gba-frame px-1.5 sm:px-2 py-0.5 flex flex-wrap items-center gap-1 sm:gap-1.5 max-w-full">
         {/* Live Real-Time Clock */}
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-0.5">
           <span
             data-testid="hud-real-clock"
-            className="text-[8px] font-['Press_Start_2P'] text-[#7dd3fc] tabular-nums"
+            className="text-[7px] sm:text-[8px] font-['Press_Start_2P'] text-[#7dd3fc] tabular-nums whitespace-nowrap"
           >
             🕒 {hud.realClock}
           </span>
         </div>
 
-        <div className="w-[2px] h-3.5 bg-[#334155]" />
+        <div className="w-[2px] h-3 bg-[#334155]" />
 
         {/* Barista Name Badge */}
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-0.5">
           <span
             data-testid="hud-barista-name"
-            className="text-[8px] font-['Press_Start_2P'] text-[#fde047]"
+            className="text-[7px] sm:text-[8px] font-['Press_Start_2P'] text-[#fde047] whitespace-nowrap"
           >
             👤 {hud.appearance.name.toUpperCase()}
           </span>
         </div>
 
-        <div className="w-[2px] h-3.5 bg-[#334155]" />
+        <div className="w-[2px] h-3 bg-[#334155]" />
 
         {/* Cozy Rating */}
-        <div className="flex items-center gap-1">
-          <span className="text-[7px] font-['Press_Start_2P'] text-[#94a3b8]">COZY</span>
+        <div className="flex items-center gap-0.5">
+          <span className="text-[6px] sm:text-[7px] font-['Press_Start_2P'] text-[#94a3b8]">COZY</span>
           <span
             data-testid="hud-cozy-rating"
-            className="text-[10px] font-['Press_Start_2P'] text-[#f8fafc] tabular-nums"
+            className="text-[9px] sm:text-[10px] font-['Press_Start_2P'] text-[#f8fafc] tabular-nums"
           >
             {Math.round(hud.cozyRating)}%
           </span>
         </div>
 
-        <div className="w-[2px] h-3.5 bg-[#334155]" />
+        <div className="w-[2px] h-3 bg-[#334155]" />
 
         {/* Hearts */}
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-0.5">
           <span className="text-[8px] font-['Press_Start_2P'] text-[#fb7185]">♥</span>
           <span
             data-testid="hud-hearts"
-            className="text-[10px] font-['Press_Start_2P'] text-[#fb7185] tabular-nums"
+            className="text-[9px] sm:text-[10px] font-['Press_Start_2P'] text-[#fb7185] tabular-nums"
           >
             {Math.round(hud.hearts)}
           </span>
         </div>
 
-        <div className="w-[2px] h-3.5 bg-[#334155]" />
+        <div className="w-[2px] h-3 bg-[#334155]" />
 
-        {/* Coins & Stock */}
-        <div className="flex items-center gap-1">
+        {/* Coins */}
+        <div className="flex items-center gap-0.5">
           <span className="text-[8px] font-['Press_Start_2P'] text-[#facc15]">$</span>
           <span
             data-testid="hud-coins"
-            className="text-[10px] font-['Press_Start_2P'] text-[#facc15] tabular-nums"
+            className="text-[9px] sm:text-[10px] font-['Press_Start_2P'] text-[#facc15] tabular-nums"
           >
             {Math.round(hud.coins)}
           </span>
         </div>
 
-        <div className="w-[2px] h-3.5 bg-[#334155]" />
+        <div className="w-[2px] h-3 bg-[#334155]" />
 
         {/* Ingredient Stock Readout */}
-        <div className="flex items-center gap-1">
-          <span className="text-[7px] font-['Press_Start_2P'] text-[#94a3b8]">STK</span>
+        <div className="flex items-center gap-0.5">
+          <span className="text-[6px] sm:text-[7px] font-['Press_Start_2P'] text-[#94a3b8]">STK</span>
           <span
             data-testid="hud-stock"
-            className={`text-[10px] font-['Press_Start_2P'] tabular-nums ${
+            className={`text-[9px] sm:text-[10px] font-['Press_Start_2P'] tabular-nums ${
               hud.finance.ingredientStock > 0 ? 'text-[#4ade80]' : 'text-[#fb7185]'
             }`}
           >
@@ -229,12 +239,12 @@ export const TopHudBar: React.FC<TopHudBarProps> = ({
           </span>
         </div>
 
-        <div className="w-[2px] h-3.5 bg-[#334155]" />
+        <div className="w-[2px] h-3 bg-[#334155]" />
 
         {/* Daily Streak Counter with Flame Icon */}
         <div
           data-testid="hud-daily-streak"
-          className="flex items-center gap-1"
+          className="flex items-center gap-0.5"
           aria-label={`Daily Streak ${hud.dailyStreak}`}
         >
           <Flame
@@ -247,12 +257,12 @@ export const TopHudBar: React.FC<TopHudBarProps> = ({
             fill={hud.dailyStreak > 0 ? '#f97316' : 'none'}
             strokeWidth={2.25}
           />
-          <span className="text-[7px] font-['Press_Start_2P'] text-[#94a3b8] hidden sm:inline">
+          <span className="text-[7px] font-['Press_Start_2P'] text-[#94a3b8] hidden md:inline">
             STREAK
           </span>
           <span
             data-testid="hud-streak-count"
-            className={`text-[10px] font-['Press_Start_2P'] tabular-nums ${
+            className={`text-[9px] sm:text-[10px] font-['Press_Start_2P'] tabular-nums ${
               hud.dailyStreak > 0 ? 'text-[#fdba74]' : 'text-[#94a3b8]'
             }`}
           >
@@ -260,7 +270,7 @@ export const TopHudBar: React.FC<TopHudBarProps> = ({
           </span>
         </div>
 
-        <div className="w-[2px] h-3.5 bg-[#334155]" />
+        <div className="w-[2px] h-3 bg-[#334155]" />
 
         {/* Daily Goal Progress Bar Component */}
         <DailyGoalProgressBar
@@ -293,14 +303,14 @@ export const TopHudBar: React.FC<TopHudBarProps> = ({
           </div>
         </div>
         <span
-          className="text-[10px] font-['Press_Start_2P'] text-[#ef4444] animate-bounce shrink-0"
+          className="text-[10px] font-['Press_Start_2P'] text-[#ef4444] shrink-0"
           aria-hidden="true"
         >
           ▼
         </span>
       </div>
 
-      {/* Right Hero, Menu, Biz & Shop, App/APK, Room, Time, Weather, Staff Hire, Audio & Utility Controls */}
+      {/* Right Action Bar + Collapsible Mobile [☰ MORE] GBA Grid Popover Drawer Trigger */}
       <div className="gba-frame px-1.5 py-0.5 flex flex-wrap items-center gap-1 shrink-0">
         {/* Character Customize Modal [👤 HERO] */}
         <button
@@ -314,7 +324,7 @@ export const TopHudBar: React.FC<TopHudBarProps> = ({
           }}
           className="gba-btn px-1.5 h-6 flex items-center justify-center text-[#fde047] cursor-pointer whitespace-nowrap"
         >
-          <span className="text-[9px]">👤 HERO</span>
+          <span className="text-[8px] sm:text-[9px]">👤 HERO</span>
         </button>
 
         {/* 1-Tap Recipe & Profit Margin Guide [📖 MENU] */}
@@ -329,7 +339,7 @@ export const TopHudBar: React.FC<TopHudBarProps> = ({
           }}
           className="gba-btn px-1.5 h-6 flex items-center justify-center text-[#7dd3fc] cursor-pointer whitespace-nowrap"
         >
-          <span className="text-[9px]">📖 MENU</span>
+          <span className="text-[8px] sm:text-[9px]">📖 MENU</span>
         </button>
 
         {/* Business Economics, Staff & Shop Modal [📊 BIZ & SHOP] */}
@@ -344,7 +354,7 @@ export const TopHudBar: React.FC<TopHudBarProps> = ({
           }}
           className="gba-btn px-1.5 h-6 flex items-center justify-center text-[#4ade80] cursor-pointer whitespace-nowrap"
         >
-          <span className="text-[9px]">📊 BIZ &amp; SHOP</span>
+          <span className="text-[8px] sm:text-[9px]">📊 BIZ</span>
         </button>
 
         {/* Offline PWA & Android APK Modal [📲 APP / APK] — Shown ONLY in Live Web Browser Mode (!isStandalone) */}
@@ -358,9 +368,9 @@ export const TopHudBar: React.FC<TopHudBarProps> = ({
               e.currentTarget.blur();
               onOpenPwaModal();
             }}
-            className="gba-btn px-1.5 h-6 flex items-center justify-center text-[#f87171] cursor-pointer whitespace-nowrap"
+            className="gba-btn px-1.5 h-6 hidden sm:flex items-center justify-center text-[#f87171] cursor-pointer whitespace-nowrap"
           >
-            <span className="text-[9px]">📲 APP / APK</span>
+            <span className="text-[8px] sm:text-[9px]">📲 APP / APK</span>
           </button>
         )}
 
@@ -380,7 +390,7 @@ export const TopHudBar: React.FC<TopHudBarProps> = ({
               isFullscreen ? 'gba-btn-active' : 'text-[#fde047]'
             }`}
           >
-            <span className="text-[9px]">[⛶]</span>
+            <span className="text-[8px] sm:text-[9px]">[⛶]</span>
           </button>
         )}
 
@@ -399,7 +409,7 @@ export const TopHudBar: React.FC<TopHudBarProps> = ({
           <span className="text-[8px]">{roomLabels[hud.room]}</span>
         </button>
 
-        {/* Time of Day Cycle [T] */}
+        {/* Time of Day Cycle [T] (Desktop inline, Mobile in ☰ MORE drawer) */}
         <button
           type="button"
           tabIndex={-1}
@@ -409,12 +419,12 @@ export const TopHudBar: React.FC<TopHudBarProps> = ({
             e.currentTarget.blur();
             onCycleTimeOfDay();
           }}
-          className="gba-btn px-1.5 h-6 hidden md:flex items-center justify-center text-[#fde047] cursor-pointer whitespace-nowrap"
+          className="gba-btn px-1.5 h-6 hidden xl:flex items-center justify-center text-[#fde047] cursor-pointer whitespace-nowrap"
         >
           <span className="text-[8px]">{timeLabels[hud.timeOfDay]}</span>
         </button>
 
-        {/* Weather Cycle [G] */}
+        {/* Weather Cycle [G] (Desktop inline, Mobile in ☰ MORE drawer) */}
         <button
           type="button"
           tabIndex={-1}
@@ -424,7 +434,7 @@ export const TopHudBar: React.FC<TopHudBarProps> = ({
             e.currentTarget.blur();
             onCycleWeather();
           }}
-          className={`gba-btn px-1.5 h-6 hidden md:flex items-center justify-center cursor-pointer whitespace-nowrap ${
+          className={`gba-btn px-1.5 h-6 hidden xl:flex items-center justify-center cursor-pointer whitespace-nowrap ${
             hud.weather === 'rain' ? 'gba-btn-active' : 'text-[#86efac]'
           }`}
         >
@@ -441,7 +451,7 @@ export const TopHudBar: React.FC<TopHudBarProps> = ({
             e.currentTarget.blur();
             onHireStaff();
           }}
-          className={`gba-btn px-1.5 h-6 flex items-center justify-center cursor-pointer whitespace-nowrap ${
+          className={`gba-btn px-1.5 h-6 hidden lg:flex items-center justify-center cursor-pointer whitespace-nowrap ${
             canAffordStaff ? 'gba-btn-active' : 'text-[#fb7185]'
           }`}
         >
@@ -462,7 +472,7 @@ export const TopHudBar: React.FC<TopHudBarProps> = ({
             e.currentTarget.blur();
             onToggleDock();
           }}
-          className={`gba-btn px-1.5 h-6 hidden sm:flex items-center justify-center cursor-pointer whitespace-nowrap ${
+          className={`gba-btn px-1.5 h-6 hidden lg:flex items-center justify-center cursor-pointer whitespace-nowrap ${
             !dockCollapsed ? 'gba-btn-active' : 'text-[#facc15]'
           }`}
         >
@@ -478,7 +488,7 @@ export const TopHudBar: React.FC<TopHudBarProps> = ({
             e.currentTarget.blur();
             onToggleBgm();
           }}
-          className={`gba-btn px-1.5 h-6 hidden lg:flex items-center justify-center cursor-pointer whitespace-nowrap ${
+          className={`gba-btn px-1.5 h-6 hidden xl:flex items-center justify-center cursor-pointer whitespace-nowrap ${
             hud.bgmEnabled ? 'gba-btn-active' : ''
           }`}
         >
@@ -494,23 +504,9 @@ export const TopHudBar: React.FC<TopHudBarProps> = ({
             e.currentTarget.blur();
             onToggleMute();
           }}
-          className="gba-btn px-1.5 h-6 hidden lg:flex items-center justify-center cursor-pointer whitespace-nowrap"
+          className="gba-btn px-1.5 h-6 hidden xl:flex items-center justify-center cursor-pointer whitespace-nowrap"
         >
           <span className="text-[8px]">🔊 SFX:{hud.muted ? 'OFF' : 'ON'}</span>
-        </button>
-
-        {/* Single-File HTML Export Modal */}
-        <button
-          type="button"
-          tabIndex={-1}
-          aria-label="View Single-File HTML Code"
-          onClick={(e) => {
-            e.currentTarget.blur();
-            onOpenCodeModal();
-          }}
-          className="gba-btn px-1.5 h-6 flex items-center justify-center text-[#86efac] cursor-pointer"
-        >
-          <span className="text-[8px]">HTML</span>
         </button>
 
         {/* Pause Button */}
@@ -522,31 +518,239 @@ export const TopHudBar: React.FC<TopHudBarProps> = ({
             e.currentTarget.blur();
             onPause();
           }}
-          className="gba-btn w-6 h-6 flex items-center justify-center cursor-pointer"
+          className="gba-btn w-6 h-6 hidden sm:flex items-center justify-center cursor-pointer"
         >
           <span className="text-[8px]">II</span>
         </button>
 
-        {/* Restart Button */}
+        {/* Collapsible Mobile & Desktop [☰ MORE] GBA Grid Popover Drawer Button */}
         <button
           type="button"
           tabIndex={-1}
-          aria-label="Restart Shift [R]"
+          data-testid="hud-more-drawer-btn"
+          aria-expanded={moreDrawerOpen}
+          aria-label="Open More Controls Menu Drawer"
           onClick={(e) => {
             e.currentTarget.blur();
-            onRestart();
+            setMoreDrawerOpen((prev) => !prev);
           }}
-          className="gba-btn px-1.5 h-6 hidden sm:flex items-center justify-center cursor-pointer"
+          className={`gba-btn px-2 h-6 flex items-center justify-center cursor-pointer whitespace-nowrap ${
+            moreDrawerOpen ? 'gba-btn-active' : 'text-[#facc15]'
+          }`}
         >
-          <span className="text-[8px]">RST</span>
+          <span className="text-[8px] sm:text-[9px]">{moreDrawerOpen ? '✕ CLOSE' : '☰ MORE'}</span>
         </button>
       </div>
+
+      {/* Collapsible Mobile [☰ MORE] GBA Grid Popover Drawer */}
+      {moreDrawerOpen && (
+        <div
+          data-testid="hud-more-drawer"
+          className="gba-frame w-full mt-1 p-2.5 bg-[#12161f] border-2 border-[#facc15] shadow-2xl"
+        >
+          <div className="flex items-center justify-between gap-2 pb-1.5 mb-2 border-b border-[#334155]">
+            <span className="text-[8px] font-['Press_Start_2P'] text-[#facc15]">
+              ☰ CAFE COMMAND DRAWER · PINCH OR TAP TO ZOOM ({zoomPct}%)
+            </span>
+            <button
+              type="button"
+              onClick={() => setMoreDrawerOpen(false)}
+              className="gba-btn px-2 py-0.5 text-[8px] text-[#f87171] cursor-pointer"
+            >
+              ✕
+            </button>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-1.5">
+            <button
+              type="button"
+              data-testid="drawer-customize-btn"
+              onClick={() => {
+                setMoreDrawerOpen(false);
+                onOpenCustomize();
+              }}
+              className="gba-btn min-h-[42px] px-2 py-1.5 text-[8px] text-[#fde047] flex items-center justify-center cursor-pointer"
+            >
+              👤 HERO CUSTOMIZE
+            </button>
+
+            <button
+              type="button"
+              data-testid="drawer-menu-btn"
+              onClick={() => {
+                setMoreDrawerOpen(false);
+                onOpenMenuModal();
+              }}
+              className="gba-btn min-h-[42px] px-2 py-1.5 text-[8px] text-[#7dd3fc] flex items-center justify-center cursor-pointer"
+            >
+              📖 RECIPES &amp; MARGINS
+            </button>
+
+            <button
+              type="button"
+              data-testid="drawer-biz-btn"
+              onClick={() => {
+                setMoreDrawerOpen(false);
+                onOpenBizModal();
+              }}
+              className="gba-btn min-h-[42px] px-2 py-1.5 text-[8px] text-[#4ade80] flex items-center justify-center cursor-pointer"
+            >
+              📊 BIZ &amp; DECOR SHOP
+            </button>
+
+            <button
+              type="button"
+              data-testid="drawer-hire-staff-btn"
+              onClick={() => {
+                setMoreDrawerOpen(false);
+                onHireStaff();
+              }}
+              className={`gba-btn min-h-[42px] px-2 py-1.5 text-[8px] flex items-center justify-center cursor-pointer ${
+                canAffordStaff ? 'gba-btn-active' : 'text-[#fb7185]'
+              }`}
+            >
+              👩‍🍳 HIRE ({hud.hiredStaffCount}/2)
+              {hud.nextStaffCost !== null ? ` $${hud.nextStaffCost}` : ' ★'}
+            </button>
+
+            <button
+              type="button"
+              data-testid="drawer-time-btn"
+              onClick={() => {
+                onCycleTimeOfDay();
+              }}
+              className="gba-btn min-h-[42px] px-2 py-1.5 text-[8px] text-[#fde047] flex items-center justify-center cursor-pointer"
+            >
+              {timeLabels[hud.timeOfDay]} [T]
+            </button>
+
+            <button
+              type="button"
+              data-testid="drawer-weather-btn"
+              onClick={() => {
+                onCycleWeather();
+              }}
+              className={`gba-btn min-h-[42px] px-2 py-1.5 text-[8px] flex items-center justify-center cursor-pointer ${
+                hud.weather === 'rain' ? 'gba-btn-active' : 'text-[#86efac]'
+              }`}
+            >
+              {weatherLabels[hud.weather]} [G]
+            </button>
+
+            <button
+              type="button"
+              data-testid="drawer-stations-btn"
+              onClick={() => {
+                setMoreDrawerOpen(false);
+                onToggleDock();
+              }}
+              className={`gba-btn min-h-[42px] px-2 py-1.5 text-[8px] flex items-center justify-center cursor-pointer ${
+                !dockCollapsed ? 'gba-btn-active' : 'text-[#facc15]'
+              }`}
+            >
+              🛠️ STATIONS BAR: {dockCollapsed ? 'OFF' : 'ON'}
+            </button>
+
+            <button
+              type="button"
+              data-testid="drawer-bgm-btn"
+              onClick={() => {
+                onToggleBgm();
+              }}
+              className={`gba-btn min-h-[42px] px-2 py-1.5 text-[8px] flex items-center justify-center cursor-pointer ${
+                hud.bgmEnabled ? 'gba-btn-active' : ''
+              }`}
+            >
+              ♪ BGM: {hud.bgmEnabled ? 'ON' : 'OFF'}
+            </button>
+
+            <button
+              type="button"
+              data-testid="drawer-sfx-btn"
+              onClick={() => {
+                onToggleMute();
+              }}
+              className="gba-btn min-h-[42px] px-2 py-1.5 text-[8px] flex items-center justify-center cursor-pointer"
+            >
+              🔊 SFX: {hud.muted ? 'OFF' : 'ON'}
+            </button>
+
+            {onResetZoom && (
+              <button
+                type="button"
+                data-testid="drawer-reset-zoom-btn"
+                onClick={() => {
+                  onResetZoom();
+                  setMoreDrawerOpen(false);
+                }}
+                className="gba-btn min-h-[42px] px-2 py-1.5 text-[8px] text-[#7dd3fc] flex items-center justify-center cursor-pointer"
+              >
+                🔍 ZOOM {zoomPct}% (RESET)
+              </button>
+            )}
+
+            <button
+              type="button"
+              data-testid="drawer-pause-btn"
+              onClick={() => {
+                setMoreDrawerOpen(false);
+                onPause();
+              }}
+              className="gba-btn min-h-[42px] px-2 py-1.5 text-[8px] flex items-center justify-center cursor-pointer"
+            >
+              II PAUSE SHIFT
+            </button>
+
+            <button
+              type="button"
+              data-testid="drawer-restart-btn"
+              onClick={() => {
+                setMoreDrawerOpen(false);
+                onRestart();
+              }}
+              className="gba-btn min-h-[42px] px-2 py-1.5 text-[8px] text-[#fb7185] flex items-center justify-center cursor-pointer"
+            >
+              ↻ RESET SHIFT
+            </button>
+
+            <button
+              type="button"
+              data-testid="drawer-html-btn"
+              onClick={() => {
+                setMoreDrawerOpen(false);
+                onOpenCodeModal();
+              }}
+              className="gba-btn min-h-[42px] px-2 py-1.5 text-[8px] text-[#86efac] flex items-center justify-center cursor-pointer"
+            >
+              📄 HTML EXPORT
+            </button>
+
+            {!isStandalone && (
+              <button
+                type="button"
+                data-testid="drawer-pwa-btn"
+                onClick={() => {
+                  setMoreDrawerOpen(false);
+                  onOpenPwaModal();
+                }}
+                className="gba-btn min-h-[42px] px-2 py-1.5 text-[8px] text-[#f87171] flex items-center justify-center cursor-pointer"
+              >
+                📲 INSTALL APP / APK
+              </button>
+            )}
+          </div>
+        </div>
+      )}
     </header>
   );
 };
 
 interface FloatingCanvasQuickBarProps {
   hud: HudSnapshot;
+  cameraZoom?: number;
+  onZoomIn?: () => void;
+  onZoomOut?: () => void;
+  onResetZoom?: () => void;
   onSmartStep: () => void;
   onWaterAllDaisies: () => void;
   onHireStaff: () => void;
@@ -561,6 +765,10 @@ interface FloatingCanvasQuickBarProps {
  */
 export const FloatingCanvasQuickBar: React.FC<FloatingCanvasQuickBarProps> = ({
   hud,
+  cameraZoom = 1,
+  onZoomIn,
+  onZoomOut,
+  onResetZoom,
   onSmartStep,
   onWaterAllDaisies,
   onHireStaff,
@@ -570,6 +778,7 @@ export const FloatingCanvasQuickBar: React.FC<FloatingCanvasQuickBarProps> = ({
 }) => {
   const orderRecipe = hud.waitingCustomerOrder ? RECIPES[hud.waitingCustomerOrder] : null;
   const canAffordStaff = hud.nextStaffCost !== null && hud.coins >= hud.nextStaffCost;
+  const zoomPct = Math.round(cameraZoom * 100);
 
   let smartLabel = '⚡ BREW / SERVE';
   if (hud.currentStepIndex === 3) {
@@ -591,6 +800,53 @@ export const FloatingCanvasQuickBar: React.FC<FloatingCanvasQuickBarProps> = ({
 
   return (
     <div className="klasik-quick-bar pointer-events-auto flex flex-wrap items-center justify-end gap-1">
+      {/* 2D Camera Zoom Quick Controls ([-], [100%] / 🔍 RESET, [+]) */}
+      {onZoomOut && onResetZoom && onZoomIn && (
+        <div
+          data-testid="quick-zoom-controls"
+          className="inline-flex items-center gap-0.5 bg-[#090b10]/90 border border-[#475569] p-0.5 shadow-lg"
+        >
+          <button
+            type="button"
+            data-testid="quick-zoom-out-btn"
+            aria-label="Zoom Out Camera"
+            onClick={(e) => {
+              e.currentTarget.blur();
+              onZoomOut();
+            }}
+            className="gba-btn px-1.5 py-0.5 text-[8px] text-[#7dd3fc] cursor-pointer"
+          >
+            -
+          </button>
+          <button
+            type="button"
+            data-testid="quick-zoom-reset-btn"
+            aria-label="Reset Camera Zoom"
+            onClick={(e) => {
+              e.currentTarget.blur();
+              onResetZoom();
+            }}
+            className={`gba-btn px-1.5 py-0.5 text-[8px] cursor-pointer tabular-nums ${
+              cameraZoom > 1.05 ? 'text-[#facc15]' : 'text-[#cbd5e1]'
+            }`}
+          >
+            🔍{zoomPct}%
+          </button>
+          <button
+            type="button"
+            data-testid="quick-zoom-in-btn"
+            aria-label="Zoom In Camera"
+            onClick={(e) => {
+              e.currentTarget.blur();
+              onZoomIn();
+            }}
+            className="gba-btn px-1.5 py-0.5 text-[8px] text-[#7dd3fc] cursor-pointer"
+          >
+            +
+          </button>
+        </div>
+      )}
+
       <button
         type="button"
         data-testid="quick-smart-step-btn"
@@ -614,7 +870,7 @@ export const FloatingCanvasQuickBar: React.FC<FloatingCanvasQuickBarProps> = ({
           canAffordStaff ? 'gba-btn-active' : 'text-[#fb7185]'
         }`}
       >
-        👩‍🍳 HIRE STAFF ({hud.hiredStaffCount}/2)
+        👩‍🍳 HIRE ({hud.hiredStaffCount}/2)
         {hud.nextStaffCost !== null ? ` $${hud.nextStaffCost}` : ' ★'}
       </button>
 

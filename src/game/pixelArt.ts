@@ -25,6 +25,9 @@ import {
   getRecommendedStation,
   getCustomerSeatSlot,
   getPartySeatedPositions,
+  getCustomerPatiencePct,
+  clampCamera2D,
+  Camera2D,
 } from './rules';
 
 export const WORLD_WIDTH = 900;
@@ -1595,7 +1598,8 @@ function drawCustomerLeader(
     const frontWaiting = getFrontWaitingCustomer(state);
     const isFrontCustomer = frontWaiting?.id === cust.id;
     const waitElapsed = Math.max(0, state.elapsedSeconds - cust.arrivalTime);
-    const patiencePct = Math.max(0.25, Math.min(1, 1 - (waitElapsed % 45) / 60));
+    const patiencePct = getCustomerPatiencePct(cust, state.elapsedSeconds);
+    void waitElapsed;
 
     if (isFrontCustomer) {
       const drinkReady = state.prep.currentStepIndex === 3 && state.prep.activeDrink !== null;
@@ -1670,6 +1674,39 @@ function drawCustomerLeader(
     ctx.fillStyle = '#fef08a';
     ctx.fillText('TAKEOUT! ☔', cx, cy - 24);
   }
+
+  // Render randomized dialogue bubble emote ('!', '?', '!!!', '♥', '♪', '★') above customer head
+  if (cust.emoteText && (cust.emoteTimer ?? 0) > 0) {
+    drawCustomerEmoteBubble(ctx, cx, cy - 38, cust.emoteText, time);
+  }
+}
+
+export function drawCustomerEmoteBubble(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  emoteText: string,
+  time: number
+) {
+  const bob = Math.round(Math.sin(time * 9 + cx * 0.1) * 2);
+  const x = px(cx);
+  const y = px(cy + bob);
+  const isUrgent = emoteText === '!!!' || emoteText === '!!';
+  const isHappy = emoteText === '♥' || emoteText === '♪' || emoteText === '★';
+  const bw = Math.max(24, emoteText.length * 8 + 14);
+  const bh = 16;
+
+  const borderColor = isUrgent ? '#ef4444' : isHappy ? '#22c55e' : '#facc15';
+  const textColor = isUrgent ? '#dc2626' : isHappy ? '#15803d' : '#090b0e';
+
+  drawPixelBox(ctx, x - bw / 2, y - bh / 2, bw, bh, '#ffffff', borderColor, '#f8fafc');
+  // Speech pointer tail
+  ctx.fillStyle = borderColor;
+  ctx.fillRect(x - 3, y + bh / 2, 6, 4);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(x - 2, y + bh / 2 - 1, 4, 3);
+
+  drawCrispText(ctx, emoteText, x, y + 4, 9, textColor, 'center');
 }
 
 /**
@@ -2475,13 +2512,21 @@ export function renderCafeWorld(
   time: number,
   hoveredStationId: string | null,
   hoveredDaisyId: string | null,
-  hoveredMiata = false
+  hoveredMiata = false,
+  camera?: Camera2D
 ) {
   ctx.save();
   ctx.imageSmoothingEnabled = false;
 
-  ctx.fillStyle = '#0b0d12';
+  ctx.fillStyle = '#090b10';
   ctx.fillRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
+
+  if (camera && camera.zoom > 1.001) {
+    const cam = clampCamera2D(camera, WORLD_WIDTH, WORLD_HEIGHT);
+    ctx.translate(WORLD_WIDTH / 2, WORLD_HEIGHT / 2);
+    ctx.scale(cam.zoom, cam.zoom);
+    ctx.translate(-cam.panX, -cam.panY);
+  }
 
   if (state.room === 'inside') {
     renderInsideRoom(ctx, state, time, hoveredStationId, hoveredMiata);
