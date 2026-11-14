@@ -8,7 +8,7 @@ interface DailyGoalProgressBarProps {
 
 /**
  * Displays the customer service objective (`servedCount / dailyTarget`) as a crisp GBA
- * pixel-art progress bar inside the Top HUD.
+ * pixel-art progress bar inside the Top HUD (zero HTML title attributes).
  */
 export const DailyGoalProgressBar: React.FC<DailyGoalProgressBarProps> = ({
   servedCount,
@@ -23,12 +23,11 @@ export const DailyGoalProgressBar: React.FC<DailyGoalProgressBarProps> = ({
     <div
       data-testid="daily-goal-progress"
       className="flex items-center gap-1.5"
-      title={`Daily Customer Service Objective: ${servedCount}/${safeTarget} Guests Served (${pct}%)`}
     >
       <div className="flex flex-col gap-0.5">
         <div className="flex items-center justify-between gap-1.5">
           <span className="text-[7px] font-['Press_Start_2P'] text-[#94a3b8]">
-            {isGoalReached ? '★ GOAL MET' : 'DAILY GOAL'}
+            {isGoalReached ? '★ GOAL MET' : 'GOAL'}
           </span>
           <span
             data-testid="hud-served"
@@ -41,7 +40,7 @@ export const DailyGoalProgressBar: React.FC<DailyGoalProgressBarProps> = ({
         </div>
 
         {/* Stepped 16-bit Pixel Progress Bar */}
-        <div className="w-20 sm:w-24 h-2.5 bg-[#090b0e] border border-[#64748b] p-[1px] overflow-hidden">
+        <div className="w-16 sm:w-20 h-2 bg-[#090b0e] border border-[#64748b] p-[1px] overflow-hidden">
           <div
             data-testid="daily-goal-fill"
             className={`h-full transition-all duration-200 ${
@@ -60,7 +59,7 @@ export const DailyGoalProgressBar: React.FC<DailyGoalProgressBarProps> = ({
             e.currentTarget.blur();
             onFinishShift();
           }}
-          className="gba-btn gba-btn-active px-1.5 py-1 text-[8px] cursor-pointer whitespace-nowrap shrink-0"
+          className="gba-btn gba-btn-active px-1.5 py-0.5 text-[8px] cursor-pointer whitespace-nowrap shrink-0"
         >
           FINISH ★
         </button>
@@ -79,10 +78,6 @@ interface ShiftSuccessNotificationProps {
   onDismiss: () => void;
 }
 
-/**
- * Displays a celebratory GBA Pokémon-styled "Shift Success" notification banner
- * when the daily customer service goal is reached.
- */
 export const ShiftSuccessNotification: React.FC<ShiftSuccessNotificationProps> = ({
   visible,
   servedCount,
@@ -99,7 +94,7 @@ export const ShiftSuccessNotification: React.FC<ShiftSuccessNotificationProps> =
       data-testid="shift-success-notification"
       role="status"
       aria-live="polite"
-      className="pointer-events-auto absolute top-2.5 left-1/2 -translate-x-1/2 z-30 w-[92%] max-w-lg gba-frame px-3.5 py-2.5 bg-[#14532d] border-[#facc15] shadow-2xl flex flex-wrap items-center justify-between gap-2"
+      className="pointer-events-auto absolute top-2.5 left-1/2 -translate-x-1/2 z-30 w-[92%] max-w-lg gba-frame px-3.5 py-2 bg-[#14532d] border-[#facc15] shadow-2xl flex flex-wrap items-center justify-between gap-2"
     >
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
@@ -111,7 +106,7 @@ export const ShiftSuccessNotification: React.FC<ShiftSuccessNotificationProps> =
           </span>
         </div>
         <p className="text-base font-['VT323'] text-[#f8fafc] leading-tight mt-0.5">
-          Daily customer service goal complete! Cozy Rating {Math.round(cozyRating)}% · ${Math.round(coins)} earned.
+          Daily customer service goal complete! Cozy Rating {Math.round(cozyRating)}% · ${Math.round(coins)} cash.
         </p>
       </div>
 

@@ -3,7 +3,6 @@ import {
   CafeState,
   createInitialCafeState,
   STATIONS,
-  RECIPES,
   MIATA_GARAGE_BOUNDS,
   TIP_JAR_BOUNDS,
   TOOL_CHEST_BOUNDS,
@@ -11,11 +10,15 @@ import {
   INSIDE_DOOR_MAT,
   GARDEN_DOOR_MAT,
   GARDEN_ORDER_WINDOW,
+  MAX_SIMULTANEOUS_CUSTOMERS,
   DrinkId,
   StationId,
   RoomId,
   CatBehaviorState,
-  NPC_NAMES,
+  BaristaAppearance,
+  UpgradeId,
+  UpgradableStationId,
+  DecorItemId,
   interactWithStation,
   advancePrepTimer,
   serveWaitingCustomer,
@@ -26,14 +29,26 @@ import {
   collectTipJar,
   triggerPhotoSquadFlash,
   hireNextStaff,
+  hireStaffById,
   petCatCompanion,
   executeSmartStep,
   toggleRoom,
   cycleTimeOfDay,
   cycleWeather,
   advanceEnvironmentAndHydration,
+  advanceCustomersSimulation,
+  updateBaristaAppearance,
+  restockWholesaleIngredients,
+  purchaseCapitalUpgrade,
+  upgradeStationEquipment,
+  purchaseOrToggleDecor,
+  createCustomerParty,
+  moveEntityWithCollisions,
+  stepAlongWaypoints,
+  completeShift,
   screenToWorldContain,
   formatRealClock,
+  resetCafeProgressV2,
 } from './game/rules';
 import {
   ParticlePool,
@@ -42,7 +57,7 @@ import {
   WORLD_HEIGHT,
 } from './game/pixelArt';
 import { soundEngine } from './game/sound';
-import { TitleScreen } from './components/TitleScreen';
+import { BootLoadingScreen, TitleScreen } from './components/TitleScreen';
 import {
   TopHudBar,
   BottomActionDock,
@@ -52,6 +67,11 @@ import {
 import { ShiftSuccessNotification } from './components/DailyGoalProgressBar';
 import { StatusModal, RunSummarySnapshot } from './components/StatusModal';
 import { CodeExportModal } from './components/CodeExportModal';
+import { CustomizeModal } from './components/CustomizeModal';
+import { BizUpgradesModal } from './components/BizUpgradesModal';
+import { RecipeMenuModal } from './components/RecipeMenuModal';
+import { PwaApkModal } from './components/PwaApkModal';
+import { initKlasikPwa, BeforeInstallPromptEvent } from './pwa/pwaManager';
 
 function makeHudSnapshot(state: CafeState): HudSnapshot {
   const waitingCustomer = state.customers.find((c) => c.state === 'waiting') ?? null;
@@ -66,6 +86,7 @@ function makeHudSnapshot(state: CafeState): HudSnapshot {
     cozyRating: state.cozyRating,
     hearts: state.hearts,
     coins: state.coins,
+    dailyStreak: state.dailyStreak,
     servedCount: state.servedCount,
     dailyTarget: state.dailyTarget,
     activeDrink: state.prep.activeDrink,
@@ -91,6 +112,15 @@ function makeHudSnapshot(state: CafeState): HudSnapshot {
     nextStaffCost: nextStaff ? nextStaff.cost : null,
     tipJarCoins: state.tipJarCoins,
     shiftSuccessBannerVisible: state.shiftSuccessBannerVisible,
+    appearance: { ...state.appearance },
+    finance: {
+      ...state.finance,
+      upgrades: { ...state.finance.upgrades },
+    },
+    staff: state.staff.map((w) => ({ ...w })),
+    stationLevels: { ...state.stationLevels },
+    decorOwned: { ...state.decorOwned },
+    decorEquipped: { ...state.decorEquipped },
   };
 }
 
@@ -108,72 +138,118 @@ export default function App() {
   const keysPressedRef = useRef<Set<string>>(new Set());
   const hitstopTimerRef = useRef<number>(0);
 
-  const [uiMode, setUiMode] = useState<'title' | 'playing' | 'paused' | 'gameover'>(
-    autostart ? 'playing' : 'title'
+  const [uiMode, setUiMode] = useState<'boot' | 'title' | 'playing' | 'paused' | 'gameover'>(
+    autostart ? 'playing' : 'boot'
   );
-  // Bottom station dock is HIDDEN/COLLAPSED by default to maximize mobile & landscape canvas space!
   const [dockCollapsed, setDockCollapsed] = useState<boolean>(true);
   const [hud, setHud] = useState<HudSnapshot>(() => makeHudSnapshot(gameStateRef.current));
   const [summaryStats, setSummaryStats] = useState<RunSummarySnapshot>({
     dayNumber: 1,
+    dailyStreak: gameStateRef.current.dailyStreak,
+    newlyUnlockedOutfits: [],
     servedCount: 0,
     dailyTarget: 6,
     cozyRating: 82,
     bestCozyRating: 85,
     hearts: 3,
-    coins: 25,
+    coins: 45,
   });
   const [showCodeModal, setShowCodeModal] = useState(false);
+  const [showCustomizeModal, setShowCustomizeModal] = useState(false);
+  const [showBizModal, setShowBizModal] = useState(false);
+  const [showMenuModal, setShowMenuModal] = useState(false);
+  const [showPwaModal, setShowPwaModal] = useState(false);
+  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
+  const [isPwaInstalled, setIsPwaInstalled] = useState<boolean>(false);
+  const [swRegistered, setSwRegistered] = useState<boolean>(false);
 
   const updateHudIfChanged = useCallback((st: CafeState) => {
     const next = makeHudSnapshot(st);
-    setHud((prev) => {
-      if (
-        prev.cozyRating === next.cozyRating &&
-        prev.hearts === next.hearts &&
-        prev.coins === next.coins &&
-        prev.servedCount === next.servedCount &&
-        prev.activeDrink === next.activeDrink &&
-        prev.currentStepIndex === next.currentStepIndex &&
-        prev.isProcessing === next.isProcessing &&
-        prev.holdingWateringCan === next.holdingWateringCan &&
-        prev.thirstyDaisyCount === next.thirstyDaisyCount &&
-        prev.miataHeadlightsOn === next.miataHeadlightsOn &&
-        prev.miataColor === next.miataColor &&
-        prev.speedBoostActive === next.speedBoostActive &&
-        prev.waitingCustomerName === next.waitingCustomerName &&
-        prev.waitingCustomerOrder === next.waitingCustomerOrder &&
-        prev.queueCount === next.queueCount &&
-        prev.lastMessage === next.lastMessage &&
-        prev.muted === next.muted &&
-        prev.bgmEnabled === next.bgmEnabled &&
-        prev.room === next.room &&
-        prev.timeOfDay === next.timeOfDay &&
-        prev.weather === next.weather &&
-        prev.realClock === next.realClock &&
-        prev.hiredStaffCount === next.hiredStaffCount &&
-        prev.tipJarCoins === next.tipJarCoins &&
-        prev.shiftSuccessBannerVisible === next.shiftSuccessBannerVisible
-      ) {
-        return prev;
-      }
-      return next;
-    });
+    setHud(next);
   }, []);
 
   const syncHudNow = useCallback(() => {
     updateHudIfChanged(gameStateRef.current);
   }, [updateHudIfChanged]);
 
-  const syncBodyMode = useCallback((mode: 'title' | 'playing' | 'paused' | 'gameover') => {
-    gameStateRef.current.mode = mode;
-    document.body.dataset.state = mode;
-    setUiMode(mode);
-  }, []);
+  const syncBodyMode = useCallback(
+    (mode: 'boot' | 'title' | 'playing' | 'paused' | 'gameover') => {
+      gameStateRef.current.mode = mode;
+      document.body.dataset.state = mode === 'boot' ? 'title' : mode;
+      setUiMode(mode);
+    },
+    []
+  );
 
   useEffect(() => {
     document.body.dataset.state = autostart ? 'playing' : 'title';
   }, [autostart]);
+
+  useEffect(() => {
+    void initKlasikPwa().then((res) => {
+      setSwRegistered(res.swRegistered);
+    });
+
+    if (typeof window !== 'undefined' && window.matchMedia('(display-mode: standalone)').matches) {
+      setIsPwaInstalled(true);
+    }
+
+    const onBeforeInstallPrompt = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e as BeforeInstallPromptEvent);
+    };
+    const onAppInstalled = () => {
+      setIsPwaInstalled(true);
+      setDeferredPrompt(null);
+    };
+
+    window.addEventListener('beforeinstallprompt', onBeforeInstallPrompt);
+    window.addEventListener('appinstalled', onAppInstalled);
+    return () => {
+      window.removeEventListener('beforeinstallprompt', onBeforeInstallPrompt);
+      window.removeEventListener('appinstalled', onAppInstalled);
+    };
+  }, []);
+
+  const handleTriggerInstallPrompt = useCallback(async (): Promise<boolean> => {
+    if (deferredPrompt) {
+      let accepted = false;
+      try {
+        await deferredPrompt.prompt();
+        const choice = await deferredPrompt.userChoice;
+        if (choice.outcome === 'accepted') {
+          setIsPwaInstalled(true);
+          accepted = true;
+        }
+      } catch {
+        // Ignore prompt rejection
+      }
+      setDeferredPrompt(null);
+      return accepted;
+    }
+    return false;
+  }, [deferredPrompt]);
+
+  const handleOpenInstallOrApkModal = useCallback(() => {
+    if (deferredPrompt) {
+      void handleTriggerInstallPrompt();
+    }
+    setShowPwaModal(true);
+  }, [deferredPrompt, handleTriggerInstallPrompt]);
+
+  const handleResetSave = useCallback(() => {
+    const fresh = resetCafeProgressV2(true);
+    gameStateRef.current = fresh;
+    soundEngine.playCustomerBell();
+    syncHudNow();
+  }, [syncHudNow]);
+
+  const handleBootComplete = useCallback(() => {
+    if (gameStateRef.current.mode === 'boot') {
+      syncBodyMode('title');
+      syncHudNow();
+    }
+  }, [syncBodyMode, syncHudNow]);
 
   const handleStartGame = useCallback(() => {
     if (document.activeElement instanceof HTMLElement) {
@@ -190,9 +266,27 @@ export default function App() {
       document.activeElement.blur();
     }
     keysPressedRef.current.clear();
-    const fresh = createInitialCafeState(true);
-    fresh.dayNumber =
-      gameStateRef.current.dayNumber + (gameStateRef.current.mode === 'gameover' ? 1 : 0);
+    const prev = gameStateRef.current;
+    const isNextDay = prev.mode === 'gameover';
+    const fresh = createInitialCafeState(true, prev.dailyStreak);
+    fresh.appearance = { ...prev.appearance };
+    fresh.dayNumber = prev.dayNumber + (isNextDay ? 1 : 0);
+    if (isNextDay) {
+      fresh.coins = prev.coins;
+      fresh.hearts = prev.hearts;
+      fresh.bestCozyRating = prev.bestCozyRating;
+      fresh.stationLevels = { ...prev.stationLevels };
+      fresh.decorOwned = { ...prev.decorOwned };
+      fresh.decorEquipped = { ...prev.decorEquipped };
+      fresh.finance = {
+        ...prev.finance,
+        upgrades: { ...prev.finance.upgrades },
+      };
+      fresh.staff = prev.staff.map((w) => ({
+        ...w,
+        carryingProp: null,
+      }));
+    }
     gameStateRef.current = fresh;
     syncBodyMode('playing');
     soundEngine.playCustomerBell();
@@ -201,7 +295,11 @@ export default function App() {
 
   const handleReturnTitle = useCallback(() => {
     keysPressedRef.current.clear();
-    const fresh = createInitialCafeState(false);
+    const prevAppearance = { ...gameStateRef.current.appearance };
+    const prevStreak = gameStateRef.current.dailyStreak;
+    const fresh = createInitialCafeState(false, prevStreak);
+    fresh.mode = 'title';
+    fresh.appearance = prevAppearance;
     gameStateRef.current = fresh;
     syncBodyMode('title');
     syncHudNow();
@@ -209,8 +307,11 @@ export default function App() {
 
   const handleFinishShift = useCallback(() => {
     const st = gameStateRef.current;
+    const completion = completeShift(st);
     setSummaryStats({
       dayNumber: st.dayNumber,
+      dailyStreak: st.dailyStreak,
+      newlyUnlockedOutfits: completion.newlyUnlockedOutfits,
       servedCount: st.servedCount,
       dailyTarget: st.dailyTarget,
       cozyRating: st.cozyRating,
@@ -220,12 +321,93 @@ export default function App() {
     });
     soundEngine.playServeSuccess();
     syncBodyMode('gameover');
-  }, [syncBodyMode]);
+    syncHudNow();
+  }, [syncBodyMode, syncHudNow]);
 
   const handleDismissShiftSuccessBanner = useCallback(() => {
     gameStateRef.current.shiftSuccessBannerVisible = false;
     syncHudNow();
   }, [syncHudNow]);
+
+  const handleSaveAppearance = useCallback(
+    (updated: BaristaAppearance) => {
+      updateBaristaAppearance(gameStateRef.current, updated);
+      soundEngine.playStepReady();
+      syncHudNow();
+    },
+    [syncHudNow]
+  );
+
+  const handleRestockWholesale = useCallback(() => {
+    const res = restockWholesaleIngredients(gameStateRef.current);
+    if (res.restocked) {
+      soundEngine.playServeSuccess();
+    } else {
+      soundEngine.playStep();
+    }
+    syncHudNow();
+  }, [syncHudNow]);
+
+  const handlePurchaseUpgrade = useCallback(
+    (upgradeId: UpgradeId) => {
+      const res = purchaseCapitalUpgrade(gameStateRef.current, upgradeId);
+      if (res.purchased) {
+        soundEngine.playServeSuccess();
+      } else {
+        soundEngine.playStep();
+      }
+      syncHudNow();
+    },
+    [syncHudNow]
+  );
+
+  const handleHireStaffById = useCallback(
+    (staffId: 'momo' | 'ken') => {
+      const st = gameStateRef.current;
+      const res = hireStaffById(st, staffId);
+      if (res.hired && res.worker) {
+        soundEngine.playServeSuccess();
+        particlesRef.current.emitBurst('sparkle', res.worker.x, res.worker.y - 16, 16);
+        particlesRef.current.emitBurst('heart', res.worker.x, res.worker.y - 24, 10);
+      } else {
+        soundEngine.playStep();
+      }
+      syncHudNow();
+    },
+    [syncHudNow]
+  );
+
+  const handleUpgradeStation = useCallback(
+    (stationId: UpgradableStationId) => {
+      const st = gameStateRef.current;
+      const res = upgradeStationEquipment(st, stationId);
+      if (res.upgraded) {
+        soundEngine.playServeSuccess();
+        const station = STATIONS.find((s) => s.id === stationId);
+        if (station) {
+          particlesRef.current.emitBurst('sparkle', station.x, station.y - 12, 16);
+        }
+      } else {
+        soundEngine.playStep();
+      }
+      syncHudNow();
+    },
+    [syncHudNow]
+  );
+
+  const handlePurchaseOrToggleDecor = useCallback(
+    (decorId: DecorItemId) => {
+      const st = gameStateRef.current;
+      const res = purchaseOrToggleDecor(st, decorId);
+      if (res.purchased || res.equipped) {
+        soundEngine.playServeSuccess();
+      } else {
+        soundEngine.playStep();
+      }
+      syncHudNow();
+    },
+    [syncHudNow]
+  );
 
   const handleTriggerStation = useCallback(
     (stationId: StationId) => {
@@ -462,7 +644,6 @@ export default function App() {
     syncHudNow();
   }, [syncHudNow]);
 
-  // 100% Pixel-Accurate Coordinate Mapping for `object-fit: contain` letterboxing/pillarboxing
   const screenToWorld = useCallback((clientX: number, clientY: number) => {
     const canvas = canvasRef.current;
     if (!canvas) return { x: 0, y: 0 };
@@ -472,14 +653,26 @@ export default function App() {
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (showCodeModal) {
+      if (showCodeModal || showCustomizeModal || showBizModal || showMenuModal || showPwaModal) {
         if (e.key === 'Escape') {
           setShowCodeModal(false);
+          setShowCustomizeModal(false);
+          setShowBizModal(false);
+          setShowMenuModal(false);
+          setShowPwaModal(false);
         }
         return;
       }
 
       const mode = gameStateRef.current.mode;
+
+      if (mode === 'boot') {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          handleBootComplete();
+        }
+        return;
+      }
 
       if (mode === 'title') {
         if (e.key === 'Enter' || e.key === ' ') {
@@ -495,6 +688,8 @@ export default function App() {
           const st = gameStateRef.current;
           setSummaryStats({
             dayNumber: st.dayNumber,
+            dailyStreak: st.dailyStreak,
+            newlyUnlockedOutfits: [],
             servedCount: st.servedCount,
             dailyTarget: st.dailyTarget,
             cozyRating: st.cozyRating,
@@ -544,6 +739,8 @@ export default function App() {
           handleToggleMiataHeadlights();
         } else if (key === 'k') {
           handleHireStaff();
+        } else if (key === 'u') {
+          setShowBizModal(true);
         } else if (key === 'c') {
           handlePetCat();
         } else if (key === 'v') {
@@ -584,6 +781,11 @@ export default function App() {
     };
   }, [
     showCodeModal,
+    showCustomizeModal,
+    showBizModal,
+    showMenuModal,
+    showPwaModal,
+    handleBootComplete,
     handleStartGame,
     handleRestartShift,
     handleTriggerStation,
@@ -600,7 +802,6 @@ export default function App() {
     syncHudNow,
   ]);
 
-  // Isolated 60fps Canvas2D Simulation & Render Loop with afterDraw yield
   useEffect(() => {
     let rafId = 0;
     let timerId = 0;
@@ -620,7 +821,6 @@ export default function App() {
 
       soundEngine.updateBgm(dt);
 
-      // Ambient weather particles (Rain, Breeze Daisy Petals, or Pollen)
       if (st.weather === 'rain') {
         for (let r = 0; r < 2; r++) {
           particles.spawn(
@@ -669,7 +869,6 @@ export default function App() {
       if (simDt > 0) {
         st.elapsedSeconds += simDt;
 
-        // 1. Update Barista Speed Boost & Movement
         if (st.barista.speedBoostTimer > 0) {
           st.barista.speedBoostTimer = Math.max(0, st.barista.speedBoostTimer - simDt);
         }
@@ -683,38 +882,34 @@ export default function App() {
         if (keys.has('s') || keys.has('arrowdown')) moveY += 1;
 
         const baseSpeed = st.barista.speedBoostTimer > 0 ? 225 : 165;
-        const minX = 64;
-        const maxX = 840;
-        const minY = st.room === 'inside' ? 145 : 128;
-        const maxY = 435;
 
         if (moveX !== 0 || moveY !== 0) {
           const len = Math.hypot(moveX, moveY);
           const dx = (moveX / len) * baseSpeed * simDt;
           const dy = (moveY / len) * baseSpeed * simDt;
-          st.barista.x = Math.max(minX, Math.min(maxX, st.barista.x + dx));
-          st.barista.y = Math.max(minY, Math.min(maxY, st.barista.y + dy));
+          const moved = moveEntityWithCollisions(st.barista, dx, dy, st.room, 11);
+          const actualDist = Math.hypot(moved.movedX, moved.movedY);
           st.barista.targetX = st.barista.x;
           st.barista.targetY = st.barista.y;
-          st.barista.walkDist += Math.hypot(dx, dy);
+          st.barista.waypoints = undefined;
+          st.barista.walkDist += actualDist;
           if (Math.abs(moveX) > Math.abs(moveY)) {
             st.barista.facing = moveX < 0 ? 'left' : 'right';
           } else {
             st.barista.facing = moveY < 0 ? 'up' : 'down';
           }
         } else {
-          const tx = st.barista.targetX - st.barista.x;
-          const ty = st.barista.targetY - st.barista.y;
-          const dist = Math.hypot(tx, ty);
+          const dist = Math.hypot(
+            st.barista.targetX - st.barista.x,
+            st.barista.targetY - st.barista.y
+          );
           if (dist > 2) {
-            const step = Math.min(dist, baseSpeed * simDt);
-            st.barista.x += (tx / dist) * step;
-            st.barista.y += (ty / dist) * step;
-            st.barista.walkDist += step;
-            if (Math.abs(tx) > Math.abs(ty)) {
-              st.barista.facing = tx < 0 ? 'left' : 'right';
-            } else {
-              st.barista.facing = ty < 0 ? 'up' : 'down';
+            const stepped = stepAlongWaypoints(st.barista, baseSpeed, simDt, st.room, 11);
+            st.barista.walkDist += stepped.distMoved;
+            if (Math.abs(stepped.dx) > Math.abs(stepped.dy)) {
+              st.barista.facing = stepped.dx < 0 ? 'left' : 'right';
+            } else if (Math.abs(stepped.dy) > 0) {
+              st.barista.facing = stepped.dy < 0 ? 'up' : 'down';
             }
           }
         }
@@ -722,7 +917,6 @@ export default function App() {
         st.barista.scaleX += (1 - st.barista.scaleX) * Math.min(1, simDt * 12);
         st.barista.scaleY += (1 - st.barista.scaleY) * Math.min(1, simDt * 12);
 
-        // 2. Advance active station timer
         const stepFinished = advancePrepTimer(st, simDt);
         if (stepFinished) {
           soundEngine.playStepReady();
@@ -730,7 +924,6 @@ export default function App() {
           updateHudIfChanged(st);
         }
 
-        // 3. Expanded 6-State Cats (Lilo inside Cafe/Garage & Champy in Garden)
         st.cats.forEach((cat) => {
           cat.tailPhase += simDt * 2.6;
           if (cat.state === 'yarn_play') {
@@ -743,15 +936,17 @@ export default function App() {
           }
 
           if (cat.state === 'walking') {
-            const cdx = cat.targetX - cat.x;
-            const cdy = cat.targetY - cat.y;
-            const cdist = Math.hypot(cdx, cdy);
+            const cdist = Math.hypot(cat.targetX - cat.x, cat.targetY - cat.y);
             const moveSpeed = 52;
             if (cdist > 2) {
-              const cstep = Math.min(cdist, moveSpeed * simDt);
-              cat.x += (cdx / cdist) * cstep;
-              cat.y += (cdy / cdist) * cstep;
-              cat.facing = cdx < 0 ? 'left' : 'right';
+              const steppedCat = stepAlongWaypoints(cat, moveSpeed, simDt, cat.room, 8);
+              if (steppedCat.dx !== 0) {
+                cat.facing = steppedCat.dx < 0 ? 'left' : 'right';
+              }
+              if (steppedCat.reachedFinal || steppedCat.distMoved < 0.05) {
+                cat.state = cat.nextStateAfterWalk;
+                cat.stateTimer = 4.2 + Math.random() * 2.5;
+              }
             } else {
               cat.state = cat.nextStateAfterWalk;
               cat.stateTimer = 4.2 + Math.random() * 2.5;
@@ -769,9 +964,9 @@ export default function App() {
               const nextBehavior = restCycle[Math.floor(Math.random() * restCycle.length)];
               if (cat.id === 'lilo') {
                 const liloWaypoints = [
-                  { x: 748, y: 274 },
+                  { x: 648, y: 294 },
                   { x: 496, y: 246 },
-                  { x: 264, y: 348 },
+                  { x: 264, y: 294 },
                 ];
                 const nextSpot =
                   liloWaypoints.find((w) => Math.hypot(w.x - cat.x, w.y - cat.y) > 40) ??
@@ -782,10 +977,10 @@ export default function App() {
                 cat.state = 'walking';
               } else {
                 const champyWaypoints = [
-                  { x: 310, y: 332 },
-                  { x: 204, y: 390 },
-                  { x: 590, y: 332 },
-                  { x: 696, y: 390 },
+                  { x: 310, y: 312 },
+                  { x: 368, y: 382 },
+                  { x: 540, y: 312 },
+                  { x: 532, y: 382 },
                 ];
                 const candidates = champyWaypoints.filter(
                   (w) => Math.hypot(w.x - cat.x, w.y - cat.y) > 45
@@ -801,10 +996,8 @@ export default function App() {
           }
         });
 
-        // 4. Environment, Couples, Photo Squad & Hired Staff Workers Progression
         let needsHudRefresh = advanceEnvironmentAndHydration(st, simDt);
 
-        // 5. Update Floating World Popups
         for (let i = st.popups.length - 1; i >= 0; i--) {
           const pop = st.popups[i];
           pop.life -= simDt;
@@ -814,43 +1007,13 @@ export default function App() {
           }
         }
 
-        // 6. Update NPC Customers (both Inside and in the Backyard Garden + 2-slot Counter Queue!)
-        for (let i = st.customers.length - 1; i >= 0; i--) {
-          const c = st.customers[i];
-          const dx = c.targetX - c.x;
-          const dy = c.targetY - c.y;
-          const dist = Math.hypot(dx, dy);
-
-          if (dist > 2) {
-            const cSpeed = 105;
-            const move = Math.min(dist, cSpeed * simDt);
-            c.x += (dx / dist) * move;
-            c.y += (dy / dist) * move;
-            c.walkDist += move;
-          } else {
-            if (c.state === 'walking_in') {
-              c.state = 'waiting';
-              soundEngine.playCustomerBell();
-              needsHudRefresh = true;
-            } else if (c.state === 'sipping') {
-              c.sipTimer -= simDt;
-              if (c.sipTimer <= 0) {
-                c.state = 'walking_out';
-                c.seatIndex = null;
-                c.targetX = c.room === 'inside' ? 356 : 450;
-                c.targetY = 500;
-              }
-            } else if (c.state === 'walking_out') {
-              st.customers.splice(i, 1);
-            }
-          }
+        if (advanceCustomersSimulation(st, simDt)) {
+          needsHudRefresh = true;
         }
 
-        // Keep up to 2 customers in the active counter queue
         const queueCustomers = st.customers.filter(
           (c) => c.state === 'walking_in' || c.state === 'waiting'
         );
-        // Ensure first waiting customer moves up to slot 0
         if (queueCustomers[0]) {
           queueCustomers[0].targetX = COUNTER_QUEUE_SLOTS[0].x;
           queueCustomers[0].targetY = COUNTER_QUEUE_SLOTS[0].y;
@@ -860,37 +1023,14 @@ export default function App() {
           queueCustomers[1].targetY = COUNTER_QUEUE_SLOTS[1].y;
         }
 
-        if (queueCustomers.length < 2) {
+        if (
+          st.customers.length < MAX_SIMULTANEOUS_CUSTOMERS &&
+          queueCustomers.length < 2
+        ) {
           const slotIndex = queueCustomers.length;
-          const slot = COUNTER_QUEUE_SLOTS[slotIndex] ?? COUNTER_QUEUE_SLOTS[0];
-          const drinkKeys: DrinkId[] = [
-            'midnight_cold_brew',
-            'daisy_vanilla_latte',
-            'miata_mocha',
-            'catnip_herbal_tea',
-          ];
-          const nextOrder = drinkKeys[(customerIdCounter - 1) % drinkKeys.length];
-          const nextName = NPC_NAMES[(customerIdCounter - 1) % NPC_NAMES.length];
-          const recipe = RECIPES[nextOrder];
-          st.customers.push({
-            id: `cust-${customerIdCounter}`,
-            name: nextName,
-            spriteVariant: customerIdCounter % 4,
-            order: nextOrder,
-            room: 'inside',
-            state: 'walking_in',
-            queueSlot: slotIndex,
-            x: slot.x,
-            y: 455 + slotIndex * 24,
-            targetX: slot.x,
-            targetY: slot.y,
-            seatIndex: null,
-            sipTimer: 0,
-            heartsGiven: 0,
-            dialogueText: `One ${recipe.shortName}, please!`,
-            arrivalTime: st.elapsedSeconds,
-            walkDist: 0,
-          });
+          st.customers.push(
+            createCustomerParty(customerIdCounter, slotIndex, st.elapsedSeconds)
+          );
           customerIdCounter++;
           needsHudRefresh = true;
         }
@@ -904,8 +1044,17 @@ export default function App() {
 
       const canvas = canvasRef.current;
       if (canvas) {
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        const targetW = Math.round(WORLD_WIDTH * dpr);
+        const targetH = Math.round(WORLD_HEIGHT * dpr);
+        if (canvas.width !== targetW || canvas.height !== targetH) {
+          canvas.width = targetW;
+          canvas.height = targetH;
+        }
         const ctx = canvas.getContext('2d');
         if (ctx) {
+          ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+          ctx.imageSmoothingEnabled = false;
           renderCafeWorld(
             ctx,
             st,
@@ -933,7 +1082,6 @@ export default function App() {
     };
   }, [updateHudIfChanged]);
 
-  // Canvas pointer hover & click handling per active Room Map (`inside` vs `garden`)
   const handleCanvasPointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const { x, y } = screenToWorld(e.clientX, e.clientY);
     const st = gameStateRef.current;
@@ -977,7 +1125,6 @@ export default function App() {
 
     const { x, y } = screenToWorld(e.clientX, e.clientY);
 
-    // 1. Check if clicked Lilo or Champy in the current room
     for (const cat of st.cats) {
       if (cat.room === st.room && Math.abs(x - cat.x) <= 28 && Math.abs(y - cat.y) <= 24) {
         handlePetCat(cat.id);
@@ -986,7 +1133,6 @@ export default function App() {
     }
 
     if (st.room === 'inside') {
-      // Check South Doorway Mat -> Switch to GARDEN map
       if (
         Math.abs(x - INSIDE_DOOR_MAT.x) <= INSIDE_DOOR_MAT.width / 2 + 6 &&
         Math.abs(y - INSIDE_DOOR_MAT.y) <= INSIDE_DOOR_MAT.height / 2 + 6
@@ -995,7 +1141,6 @@ export default function App() {
         return;
       }
 
-      // Check Counter Tip Jar
       if (
         Math.abs(x - TIP_JAR_BOUNDS.x) <= TIP_JAR_BOUNDS.width / 2 + 8 &&
         Math.abs(y - TIP_JAR_BOUNDS.y) <= TIP_JAR_BOUNDS.height / 2 + 8
@@ -1004,7 +1149,6 @@ export default function App() {
         return;
       }
 
-      // Check Garage Mechanic Tool Chest -> Cycle Miata Custom Paint
       if (
         Math.abs(x - TOOL_CHEST_BOUNDS.x) <= TOOL_CHEST_BOUNDS.width / 2 + 8 &&
         Math.abs(y - TOOL_CHEST_BOUNDS.y) <= TOOL_CHEST_BOUNDS.height / 2 + 8
@@ -1013,13 +1157,11 @@ export default function App() {
         return;
       }
 
-      // Check Miata Photo Squad (Trio of Friends)
       if (Math.abs(x - 748) <= 68 && Math.abs(y - 328) <= 32) {
         handlePhotoSquadSnap();
         return;
       }
 
-      // Check Classic Red 1990 Mazda Miata MX-5 in the Garage Showroom
       if (
         Math.abs(x - MIATA_GARAGE_BOUNDS.x) <= MIATA_GARAGE_BOUNDS.width / 2 &&
         Math.abs(y - MIATA_GARAGE_BOUNDS.y) <= MIATA_GARAGE_BOUNDS.height / 2
@@ -1028,7 +1170,6 @@ export default function App() {
         return;
       }
 
-      // Check waiting Customers or their Pokémon GBA dialogue box
       const waitingCustomer = st.customers.find((c) => c.state === 'waiting');
       if (
         waitingCustomer &&
@@ -1041,7 +1182,6 @@ export default function App() {
         return;
       }
 
-      // Check Indoor Brewing & Pickup Stations
       for (const s of STATIONS) {
         if (s.id === 'watering_can') continue;
         if (Math.abs(x - s.x) <= s.width / 2 + 6 && Math.abs(y - s.y) <= s.height / 2 + 6) {
@@ -1050,8 +1190,6 @@ export default function App() {
         }
       }
     } else {
-      // GARDEN ROOM INTERACTIONS
-      // Check North Veranda Doorway Mat -> Switch to INSIDE map
       if (
         Math.abs(x - GARDEN_DOOR_MAT.x) <= GARDEN_DOOR_MAT.width / 2 + 6 &&
         Math.abs(y - GARDEN_DOOR_MAT.y) <= GARDEN_DOOR_MAT.height / 2 + 6
@@ -1060,7 +1198,6 @@ export default function App() {
         return;
       }
 
-      // Check Veranda Pass-Through Order Window -> Smart Step!
       if (
         Math.abs(x - GARDEN_ORDER_WINDOW.x) <= GARDEN_ORDER_WINDOW.width / 2 + 6 &&
         Math.abs(y - GARDEN_ORDER_WINDOW.y) <= GARDEN_ORDER_WINDOW.height / 2 + 6
@@ -1069,7 +1206,6 @@ export default function App() {
         return;
       }
 
-      // Check Center Garden Watering Well -> Hydrate all thirsty daisies!
       const well = STATIONS.find((s) => s.id === 'watering_can');
       if (
         well &&
@@ -1080,7 +1216,6 @@ export default function App() {
         return;
       }
 
-      // Check 6 Blooming Daisy Planter Beds
       for (const d of st.daisies) {
         if (Math.abs(x - d.x) <= 54 && Math.abs(y - d.y) <= 34) {
           handleWaterDaisyById(d.id);
@@ -1089,16 +1224,15 @@ export default function App() {
       }
     }
 
-    // Otherwise walk Barista to the clicked spot
-    st.barista.targetX = Math.max(64, Math.min(840, x));
-    st.barista.targetY = Math.max(135, Math.min(435, y));
+    st.barista.targetX = Math.max(46, Math.min(854, x));
+    st.barista.targetY = Math.max(132, Math.min(442, y));
     soundEngine.playStep();
   };
 
   return (
     <main className="relative w-screen h-dvh overflow-hidden bg-[#0b0d12] flex flex-col justify-between">
-      {/* External Top GBA Status HUD Bar (Zero Horizontal Scroll) */}
-      {uiMode !== 'title' && (
+      {/* External Top GBA Status HUD Bar */}
+      {uiMode !== 'boot' && uiMode !== 'title' && (
         <TopHudBar
           hud={hud}
           dockCollapsed={dockCollapsed}
@@ -1115,10 +1249,16 @@ export default function App() {
           onCycleTimeOfDay={handleCycleTimeOfDay}
           onCycleWeather={handleCycleWeather}
           onHireStaff={handleHireStaff}
+          onOpenCustomize={() => setShowCustomizeModal(true)}
+          onOpenMenuModal={() => setShowMenuModal(true)}
+          onOpenBizModal={() => setShowBizModal(true)}
+          onOpenPwaModal={handleOpenInstallOrApkModal}
           onPause={() => {
             const st = gameStateRef.current;
             setSummaryStats({
               dayNumber: st.dayNumber,
+              dailyStreak: st.dailyStreak,
+              newlyUnlockedOutfits: [],
               servedCount: st.servedCount,
               dailyTarget: st.dailyTarget,
               cozyRating: st.cozyRating,
@@ -1134,7 +1274,7 @@ export default function App() {
         />
       )}
 
-      {/* Dedicated Non-Overlapping GBA Pixel-Art Viewport Stage + Shift Success Banner + Floating Corner Quick-Actions */}
+      {/* Dedicated Non-Overlapping GBA Pixel-Art Viewport Stage */}
       <div className="relative flex-1 min-h-0 w-full flex items-center justify-center p-1 bg-[#0b0d12]">
         <canvas
           ref={canvasRef}
@@ -1160,14 +1300,15 @@ export default function App() {
           />
         )}
 
-        {/* Floating Touch-Friendly Quick-Action Buttons on the bottom-right corner of the viewport */}
+        {/* Slim Corner Quick-Action Buttons */}
         {uiMode === 'playing' && (
-          <div className="pointer-events-none absolute bottom-2.5 right-3 z-10">
+          <div className="pointer-events-none absolute bottom-2 right-2.5 z-10">
             <FloatingCanvasQuickBar
               hud={hud}
               onSmartStep={handleSmartStep}
               onWaterAllDaisies={handleWaterAllDaisies}
               onHireStaff={handleHireStaff}
+              onOpenBizModal={() => setShowBizModal(true)}
               onPetCats={() => handlePetCat()}
               onToggleRoom={() => handleToggleRoom()}
             />
@@ -1176,7 +1317,7 @@ export default function App() {
       </div>
 
       {/* Collapsible External Bottom GBA Action Dock (Hidden by Default) */}
-      {uiMode !== 'title' && (
+      {uiMode !== 'boot' && uiMode !== 'title' && (
         <BottomActionDock
           hud={hud}
           collapsed={dockCollapsed}
@@ -1188,11 +1329,64 @@ export default function App() {
         />
       )}
 
-      {/* Title Screen Overlay */}
+      {/* Pre-Title GBA Boot / Loading Screen (1.5s) */}
+      {uiMode === 'boot' && <BootLoadingScreen onComplete={handleBootComplete} />}
+
+      {/* Minimalist Landscape-Optimized Title Screen */}
       {uiMode === 'title' && (
         <TitleScreen
           onStart={handleStartGame}
-          onOpenCodeModal={() => setShowCodeModal(true)}
+          onOpenCustomize={() => setShowCustomizeModal(true)}
+          onInstallApp={handleOpenInstallOrApkModal}
+        />
+      )}
+
+      {/* Character Customization & Rename Modal */}
+      {showCustomizeModal && (
+        <CustomizeModal
+          appearance={hud.appearance}
+          dailyStreak={hud.dailyStreak}
+          onSave={handleSaveAppearance}
+          onClose={() => setShowCustomizeModal(false)}
+        />
+      )}
+
+      {/* 1-Tap Recipe & Profit Margin Guide ([📖 MENU]) */}
+      {showMenuModal && (
+        <RecipeMenuModal
+          cozyRating={hud.cozyRating}
+          finance={hud.finance}
+          onClose={() => setShowMenuModal(false)}
+        />
+      )}
+
+      {/* Real Business Economics, Staff Payroll, Multi-Tier Machines & Decor Shop Modal */}
+      {showBizModal && (
+        <BizUpgradesModal
+          coins={hud.coins}
+          finance={hud.finance}
+          staff={hud.staff}
+          stationLevels={hud.stationLevels}
+          decorOwned={hud.decorOwned}
+          decorEquipped={hud.decorEquipped}
+          onRestockWholesale={handleRestockWholesale}
+          onHireStaffById={handleHireStaffById}
+          onUpgradeStation={handleUpgradeStation}
+          onPurchaseOrToggleDecor={handlePurchaseOrToggleDecor}
+          onPurchaseUpgrade={handlePurchaseUpgrade}
+          onResetSave={handleResetSave}
+          onClose={() => setShowBizModal(false)}
+        />
+      )}
+
+      {/* Offline PWA & Android .APK Export Modal ([📲 APP / APK]) */}
+      {showPwaModal && (
+        <PwaApkModal
+          isInstallable={Boolean(deferredPrompt)}
+          isInstalled={isPwaInstalled}
+          swRegistered={swRegistered}
+          onTriggerInstallPrompt={handleTriggerInstallPrompt}
+          onClose={() => setShowPwaModal(false)}
         />
       )}
 
@@ -1205,6 +1399,7 @@ export default function App() {
           onRestart={handleRestartShift}
           onReturnTitle={handleReturnTitle}
           onOpenCodeModal={() => setShowCodeModal(true)}
+          onOpenCustomize={() => setShowCustomizeModal(true)}
         />
       )}
 

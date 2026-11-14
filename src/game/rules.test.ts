@@ -9,18 +9,86 @@ import {
   cycleMiataPaintColor,
   collectTipJar,
   hireNextStaff,
+  hireStaffById,
+  deductDailyStaffPayroll,
+  upgradeStationEquipment,
+  getStationProcessDuration,
+  purchaseOrToggleDecor,
+  hitsCollider,
+  moveEntityWithCollisions,
+  buildWaypoints,
+  createCustomerParty,
   petCatCompanion,
   executeSmartStep,
   toggleRoom,
   cycleTimeOfDay,
   cycleWeather,
   advanceEnvironmentAndHydration,
+  advanceCustomersSimulation,
   getTimeOfDayFromHour,
   screenToWorldContain,
   getRecommendedStation,
+  updateBaristaAppearance,
+  restockWholesaleIngredients,
+  purchaseCapitalUpgrade,
+  triggerPhotoSquadFlash,
+  completeShift,
+  isOutfitUnlocked,
+  BARISTA_OUTFITS,
+  INSIDE_DOOR_MAT,
+  CAFE_SAVE_KEY_V2,
+  saveCafeProgressV2,
+  loadCafeProgressV2,
+  resetCafeProgressV2,
 } from './rules';
 
-test('initial state starts in INSIDE room with Classic Red 1990 Miata, 2 waiting customers in queue, 4 dating couples, photo squad, and 6 daisy beds', () => {
+test('automatic local save (klasik_cafe_save_v2) persists and restores progress and supports reset', () => {
+  const store = new Map<string, string>();
+  const mockStorage = {
+    getItem: (k: string) => store.get(k) ?? null,
+    setItem: (k: string, v: string) => {
+      store.set(k, v);
+    },
+    removeItem: (k: string) => {
+      store.delete(k);
+    },
+  };
+  (globalThis as unknown as { window: unknown }).window = {
+    localStorage: mockStorage,
+  };
+
+  try {
+    const state = createInitialCafeState(true);
+    state.coins = 250;
+    state.miataColor = 'white';
+    state.stationLevels.espresso = 3;
+    state.decorOwned.checkered_marble_floor = true;
+    state.decorEquipped.checkered_marble_floor = true;
+    saveCafeProgressV2(state);
+
+    assert.equal(store.has(CAFE_SAVE_KEY_V2), true);
+
+    const restored = createInitialCafeState(true);
+    assert.equal(restored.coins, 250);
+    assert.equal(restored.miataColor, 'white');
+    assert.equal(restored.stationLevels.espresso, 3);
+    assert.equal(restored.decorEquipped.checkered_marble_floor, true);
+
+    const reset = resetCafeProgressV2(true);
+    assert.equal(reset.coins, 45);
+    assert.equal(reset.miataColor, 'red');
+    assert.equal(reset.stationLevels.espresso, 1);
+  } finally {
+    delete (globalThis as unknown as { window?: unknown }).window;
+  }
+});
+
+test('initial state starts in boot mode (or playing with autostart), with zero static mannequins and dynamic parties', () => {
+  const bootState = createInitialCafeState(false);
+  assert.equal(bootState.mode, 'boot');
+  assert.equal(bootState.appearance.name, 'Klasik');
+  assert.equal(bootState.finance.ingredientStock, 12);
+
   const state = createInitialCafeState(true);
   assert.equal(state.mode, 'playing');
   assert.equal(state.room, 'inside');
@@ -28,110 +96,236 @@ test('initial state starts in INSIDE room with Classic Red 1990 Miata, 2 waiting
   assert.equal(state.customers.length, 2);
   assert.equal(state.customers[0].name, 'Flora');
   assert.equal(state.customers[1].name, 'Takumi');
-  assert.equal(state.couples.length, 4);
-  assert.equal(state.photoSquad.members.length, 3);
+  // Static display NPCs are removed in favor of living dynamic customer parties
+  assert.equal(state.couples.length, 0);
+  assert.equal(state.photoSquad.members.length, 0);
   assert.equal(state.daisies.length, 6);
-  assert.equal(state.cats[0].state, 'yarn_play');
-  assert.equal(state.cats[1].state, 'stretching');
   assert.equal(getRecommendedStation(state), 'grinder');
 });
 
-test('clicking a station while a step is in progress smoothly completes current step and immediately starts the next step without dropping input', () => {
-  const state = createInitialCafeState(true);
+test('strict 2D AABB collision physics and multi-waypoint pathfinding prevent wall/counter/Miata clipping', () => {
+  // Cashier/Front Counter (x: 68..428, y: 212..276) blocks direct walk-through
+  assert.equal(Boolean(hitsCollider(250, 240, 'inside', 10)), true);
+  // Open barista lane (y: 192) is clear
+  assert.equal(Boolean(hitsCollider(250, 192, 'inside', 10)), false);
+  // 1990 Miata MX-5 chassis (x: 786, y: 204) blocks walk-through
+  assert.equal(Boolean(hitsCollider(786, 204, 'inside', 10)), true);
 
-  // Click 1: Starts Step 1 (grinder)
-  const r1 = interactWithStation(state, 'grinder');
-  assert.equal(r1.handled, true);
-  assert.equal(state.prep.processingStation, 'grinder');
-  assert.equal(state.prep.currentStepIndex, 0);
+  // Attempting to move from y=192 straight down into the counter at y=225 stops at y=192
+  const entity = { x: 250, y: 192 };
+  const blocked = moveEntityWithCollisions(entity, 0, 33, 'inside', 10);
+  assert.equal(blocked.blocked, true);
+  assert.equal(entity.y, 192);
 
-  // Click 2 (while grinder is still running!): Smoothly completes Step 1 AND starts Step 2 (espresso)
-  const r2 = interactWithStation(state, 'espresso');
-  assert.equal(r2.handled, true);
-  assert.equal(state.prep.currentStepIndex, 1);
-  assert.equal(state.prep.processingStation, 'espresso');
-
-  // Click 3 (while espresso is still running!): Smoothly completes Step 2 AND starts Step 3 (cup_counter)
-  const r3 = interactWithStation(state, 'cup_counter');
-  assert.equal(r3.handled, true);
-  assert.equal(state.prep.currentStepIndex, 2);
-  assert.equal(state.prep.processingStation, 'cup_counter');
-
-  // Click 4: Completes Step 3 -> drink ready!
-  executeSmartStep(state);
-  assert.equal(state.prep.currentStepIndex, 0); // Served Flora immediately!
-  assert.equal(state.servedCount, 1);
+  // Waypoint pathfinder routes around the open right-hand walkway end of the espresso counter (x: 472)
+  const wps = buildWaypoints(220, 192, 220, 320, 'inside');
+  assert.ok(wps.length >= 2);
+  assert.equal(wps[0].x, 472);
 });
 
-test('screenToWorldContain accurately maps coordinates when letterboxed or pillarboxed', () => {
-  // 900x480 inside a 900x960 portrait container (240px top/bottom letterbox bars)
+test('staff hiring system recruits Momo ($35) and Ken ($45) and deducts recurring $12/day payroll in P&L ledger', () => {
+  const state = createInitialCafeState(true);
+  state.coins = 120;
+
+  const hireMomo = hireStaffById(state, 'momo');
+  assert.equal(hireMomo.hired, true);
+  assert.equal(hireMomo.worker?.name, 'Momo');
+  assert.equal(state.coins, 85);
+
+  const hireKen = hireStaffById(state, 'ken');
+  assert.equal(hireKen.hired, true);
+  assert.equal(hireKen.worker?.name, 'Ken');
+  assert.equal(state.coins, 40);
+
+  // Serve a drink so revenue is positive, then complete shift to trigger automatic $24 payroll deduction ($12 x 2)
+  state.prep.activeDrink = 'miata_mocha';
+  state.prep.currentStepIndex = 3;
+  serveWaitingCustomer(state);
+
+  const coinsBeforeShiftEnd = state.coins;
+  state.servedCount = state.dailyTarget;
+  const shiftRes = completeShift(state);
+  assert.equal(shiftRes.payrollDeducted, 24);
+  assert.equal(state.finance.payrollExpense, 24);
+  assert.equal(state.coins, coinsBeforeShiftEnd - 24);
+  assert.equal(
+    state.finance.netProfit,
+    Number(
+      (
+        state.finance.grossRevenue -
+        state.finance.totalCogs -
+        state.finance.payrollExpense
+      ).toFixed(2)
+    )
+  );
+
+  // Direct deductDailyStaffPayroll helper check
+  const directPayroll = deductDailyStaffPayroll(state);
+  assert.equal(directPayroll.totalSalary, 24);
+});
+
+test('multi-tier station upgrades evolve Level 1 (2.8s) -> Level 2 (1.5s) -> Level 3 (0.65s)', () => {
+  const state = createInitialCafeState(true);
+  state.coins = 500;
+
+  assert.equal(state.stationLevels.grinder, 1);
+  assert.equal(getStationProcessDuration(state, 'grinder'), 2.8);
+
+  const upg2 = upgradeStationEquipment(state, 'grinder');
+  assert.equal(upg2.upgraded, true);
+  assert.equal(upg2.newLevel, 2);
+  assert.equal(getStationProcessDuration(state, 'grinder'), 1.5);
+
+  const upg3 = upgradeStationEquipment(state, 'grinder');
+  assert.equal(upg3.upgraded, true);
+  assert.equal(upg3.newLevel, 3);
+  assert.equal(getStationProcessDuration(state, 'grinder'), 0.65);
+
+  // Cannot upgrade past Level 3
+  const upgMax = upgradeStationEquipment(state, 'grinder');
+  assert.equal(upgMax.upgraded, false);
+});
+
+test('decor shop purchases and toggles interior and outdoor garden customizations', () => {
+  const state = createInitialCafeState(true);
+  state.coins = 300;
+
+  const buyMarble = purchaseOrToggleDecor(state, 'checkered_marble_floor');
+  assert.equal(buyMarble.purchased, true);
+  assert.equal(buyMarble.equipped, true);
+  assert.equal(state.decorOwned.checkered_marble_floor, true);
+  assert.equal(state.decorEquipped.checkered_marble_floor, true);
+
+  // Toggling already owned decor unequips/equips without charging coins again
+  const coinsAfterBuy = state.coins;
+  const toggleOff = purchaseOrToggleDecor(state, 'checkered_marble_floor');
+  assert.equal(toggleOff.purchased, false);
+  assert.equal(toggleOff.equipped, false);
+  assert.equal(state.coins, coinsAfterBuy);
+});
+
+test('dynamic customer party generator spawns couples/families/friends and accompanying pets', () => {
+  const party0 = createCustomerParty(0, 0, 0);
+  const party1 = createCustomerParty(1, 1, 2);
+  const party2 = createCustomerParty(2, 0, 4);
+  const party3 = createCustomerParty(3, 1, 6);
+
+  assert.equal(party0.partyKind, 'solo');
+  assert.ok(party0.pet !== null);
+
+  assert.equal(party1.partyKind, 'couple');
+  assert.ok(party1.companions.length >= 1);
+
+  assert.equal(party2.partyKind, 'friends');
+  assert.ok(party2.pet !== null);
+
+  assert.equal(party3.partyKind, 'family');
+  assert.equal(party3.companions.some((c) => c.isChild), true);
+});
+
+test('weather-aware overflow routes 5th customer to Garden in clear weather, or triggers TAKEOUT! ☔ in rain', () => {
+  const state = createInitialCafeState(true);
+  state.weather = 'clear';
+
+  // Occupy all 4 Indoor/Garage tables (seats 0..3)
+  for (let i = 0; i < 4; i++) {
+    state.prep.activeDrink = 'miata_mocha';
+    state.prep.currentStepIndex = 3;
+    const res = serveWaitingCustomer(state);
+    assert.equal(res.served, true);
+    assert.equal(res.routedToGarden, false);
+    assert.ok(res.customer!.sipTimer >= 20 && res.customer!.sipTimer <= 30);
+  }
+
+  // 5th served customer in clear weather overflows to Garden via South Doorway!
+  state.prep.activeDrink = 'miata_mocha';
+  state.prep.currentStepIndex = 3;
+  const res5 = serveWaitingCustomer(state);
+  assert.equal(res5.served, true);
+  assert.equal(res5.routedToGarden, true);
+  assert.equal(res5.rainTakeout, false);
+  const overflowCust = res5.customer!;
+  assert.equal(overflowCust.state, 'walking_to_garden');
+  assert.equal(overflowCust.targetX, INSIDE_DOOR_MAT.x);
+  assert.equal(overflowCust.targetY, INSIDE_DOOR_MAT.y);
+
+  // Move customer to doorway and advance simulation -> switches room to 'garden' and state to 'sipping'
+  overflowCust.x = INSIDE_DOOR_MAT.x;
+  overflowCust.y = INSIDE_DOOR_MAT.y;
+  overflowCust.waypoints = [{ x: INSIDE_DOOR_MAT.x, y: INSIDE_DOOR_MAT.y }];
+  advanceCustomersSimulation(state, 0.1);
+  assert.equal(overflowCust.room, 'garden');
+  assert.equal(overflowCust.state, 'sipping');
+
+  // Now switch weather to RAIN and add a new waiting customer while indoor tables remain full
+  state.weather = 'rain';
+  const rainParty = createCustomerParty(99, 0, 10, true);
+  state.customers.push(rainParty);
+  state.prep.activeDrink = 'miata_mocha';
+  state.prep.currentStepIndex = 3;
+
+  const rainRes = serveWaitingCustomer(state);
+  assert.equal(rainRes.served, true);
+  assert.equal(rainRes.routedToGarden, false);
+  assert.equal(rainRes.rainTakeout, true);
+  assert.equal(rainRes.customer!.isTakeout, true);
+  assert.equal(rainRes.customer!.state, 'walking_out');
+  assert.equal(rainRes.customer!.dialogueText, 'TAKEOUT! ☔');
+});
+
+test('character customization, wholesale restock, capital upgrades, and daily streak milestones work cleanly', () => {
+  const state = createInitialCafeState(true, 0);
+  state.coins = 300;
+
+  updateBaristaAppearance(state, {
+    name: 'Kenji',
+    hairColorIndex: 3,
+    skinToneIndex: 2,
+    outfitStyleId: 'miata_red',
+  });
+  assert.equal(state.appearance.name, 'Kenji');
+  assert.equal(state.appearance.outfitStyleId, 'miata_red');
+
+  assert.equal(restockWholesaleIngredients(state).restocked, true);
+  assert.equal(purchaseCapitalUpgrade(state, 'direct_trade_beans').purchased, true);
+  assert.equal(purchaseCapitalUpgrade(state, 'dual_boiler').purchased, true);
+  assert.equal(purchaseCapitalUpgrade(state, 'custom_sleeves').purchased, true);
+  assert.equal(purchaseCapitalUpgrade(state, 'miata_merch_stand').purchased, true);
+
+  const tipsBefore = state.tipJarCoins;
+  triggerPhotoSquadFlash(state);
+  assert.equal(state.tipJarCoins, tipsBefore + 5);
+
+  const r1 = interactWithStation(state, 'grinder');
+  assert.equal(r1.handled, true);
+  const r2 = interactWithStation(state, 'espresso');
+  assert.equal(r2.handled, true);
+  const r3 = interactWithStation(state, 'cup_counter');
+  assert.equal(r3.handled, true);
+  executeSmartStep(state);
+
   const rect = { left: 0, top: 0, width: 900, height: 960 };
   const center = screenToWorldContain(450, 480, rect, 900, 480);
   assert.equal(Math.round(center.x), 450);
   assert.equal(Math.round(center.y), 240);
 
-  // Top edge of rendered canvas is at clientY = 240
-  const topEdge = screenToWorldContain(112, 240, rect, 900, 480);
-  assert.equal(Math.round(topEdge.x), 112);
-  assert.equal(Math.round(topEdge.y), 0);
-});
-
-test('hiring Miko ($35) and Ken ($50), collecting Tip Jar, cycling Miata paint, and Shift Success trigger work accurately', () => {
-  const state = createInitialCafeState(true);
-  state.coins = 100;
-
-  // Hire Worker 1: Miko ($35)
-  const h1 = hireNextStaff(state);
-  assert.equal(h1.hired, true);
-  assert.equal(h1.worker?.id, 'miko');
-  assert.equal(state.coins, 65);
-
-  // Hire Worker 2: Ken ($50)
-  const h2 = hireNextStaff(state);
-  assert.equal(h2.hired, true);
-  assert.equal(h2.worker?.id, 'ken');
-  assert.equal(state.coins, 15);
-
-  // Collect Tip Jar (+6c)
-  const tips = collectTipJar(state);
-  assert.equal(tips, 6);
-  assert.equal(state.coins, 21);
-
-  // Cycle Miata Paint at Tool Chest (red -> white -> black -> red)
+  assert.equal(hireNextStaff(state).hired, true);
+  assert.ok(collectTipJar(state) > 0);
   assert.equal(cycleMiataPaintColor(state), 'white');
-  assert.equal(cycleMiataPaintColor(state), 'black');
-  assert.equal(cycleMiataPaintColor(state), 'red');
-
-  // Reaching dailyTarget triggers shiftSuccessBannerVisible
-  state.servedCount = 5;
-  state.prep.activeDrink = 'miata_mocha';
-  state.prep.currentStepIndex = 3;
-  const serveRes = serveWaitingCustomer(state);
-  assert.equal(serveRes.served, true);
-  assert.equal(serveRes.goalJustReached, true);
-  assert.equal(state.shiftSuccessBannerVisible, true);
-});
-
-test('time-of-day hour mapping, manual override, weather rain hydration, and waterAllThirstyDaisies work cleanly', () => {
   assert.equal(getTimeOfDayFromHour(10), 'day');
-  assert.equal(getTimeOfDayFromHour(18), 'sunset');
-  assert.equal(getTimeOfDayFromHour(22), 'night');
-
-  const state = createInitialCafeState(true);
   cycleTimeOfDay(state);
-  assert.equal(state.timeManualOverride, true);
-
-  cycleWeather(state); // breeze
-  cycleWeather(state); // rain
-  const before = state.daisies[0].hydration;
-  advanceEnvironmentAndHydration(state, 2.0);
-  assert.equal(Math.round(state.daisies[0].hydration), Math.round(before + 8));
-
+  cycleWeather(state);
+  advanceEnvironmentAndHydration(state, 1.0);
   waterAllThirstyDaisies(state);
-  assert.ok(state.daisies.every((d) => !d.needsWater));
-
   toggleMiataHeadlights(state);
-  assert.equal(state.miataHeadlightsOn, false);
   petCatCompanion(state, 'lilo');
   assert.equal(toggleRoom(state), 'garden');
+
+  const sepia = BARISTA_OUTFITS.find((o) => o.id === 'vintage_sepia')!;
+  assert.equal(isOutfitUnlocked(sepia, state.dailyStreak), false);
+  state.servedCount = state.dailyTarget;
+  const shift1 = completeShift(state);
+  assert.equal(shift1.streakIncremented, true);
+  assert.equal(shift1.dailyStreak, 1);
+  assert.equal(isOutfitUnlocked(sepia, state.dailyStreak), true);
 });

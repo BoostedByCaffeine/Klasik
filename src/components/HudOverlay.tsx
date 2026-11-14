@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Flame } from 'lucide-react';
 import {
   DrinkId,
   RECIPES,
@@ -7,6 +8,12 @@ import {
   TimeOfDay,
   WeatherType,
   MiataPaintColor,
+  BaristaAppearance,
+  BusinessFinanceState,
+  StaffWorker,
+  UpgradableStationId,
+  StationTier,
+  DecorItemId,
 } from '../game/rules';
 import { DailyGoalProgressBar } from './DailyGoalProgressBar';
 
@@ -14,6 +21,7 @@ export interface HudSnapshot {
   cozyRating: number;
   hearts: number;
   coins: number;
+  dailyStreak: number;
   servedCount: number;
   dailyTarget: number;
   activeDrink: DrinkId | null;
@@ -39,6 +47,12 @@ export interface HudSnapshot {
   nextStaffCost: number | null;
   tipJarCoins: number;
   shiftSuccessBannerVisible: boolean;
+  appearance: BaristaAppearance;
+  finance: BusinessFinanceState;
+  staff: StaffWorker[];
+  stationLevels: Record<UpgradableStationId, StationTier>;
+  decorOwned: Record<DecorItemId, boolean>;
+  decorEquipped: Record<DecorItemId, boolean>;
 }
 
 interface TopHudBarProps {
@@ -51,6 +65,10 @@ interface TopHudBarProps {
   onCycleTimeOfDay: () => void;
   onCycleWeather: () => void;
   onHireStaff: () => void;
+  onOpenCustomize: () => void;
+  onOpenBizModal: () => void;
+  onOpenMenuModal: () => void;
+  onOpenPwaModal: () => void;
   onPause: () => void;
   onRestart: () => void;
   onOpenCodeModal: () => void;
@@ -67,6 +85,10 @@ export const TopHudBar: React.FC<TopHudBarProps> = ({
   onCycleTimeOfDay,
   onCycleWeather,
   onHireStaff,
+  onOpenCustomize,
+  onOpenBizModal,
+  onOpenMenuModal,
+  onOpenPwaModal,
   onPause,
   onRestart,
   onOpenCodeModal,
@@ -93,60 +115,146 @@ export const TopHudBar: React.FC<TopHudBarProps> = ({
 
   const canAffordStaff = hud.nextStaffCost !== null && hud.coins >= hud.nextStaffCost;
 
+  const prevStreakRef = useRef(hud.dailyStreak);
+  const pulseTimerRef = useRef<number | null>(null);
+  const [isFlamePulsing, setIsFlamePulsing] = useState(false);
+  const [flamePulseKey, setFlamePulseKey] = useState(0);
+
+  useEffect(() => {
+    if (hud.dailyStreak > prevStreakRef.current) {
+      setFlamePulseKey((k) => k + 1);
+      setIsFlamePulsing(true);
+      if (pulseTimerRef.current !== null) {
+        window.clearTimeout(pulseTimerRef.current);
+      }
+      pulseTimerRef.current = window.setTimeout(() => {
+        setIsFlamePulsing(false);
+        pulseTimerRef.current = null;
+      }, 2300);
+    }
+    prevStreakRef.current = hud.dailyStreak;
+  }, [hud.dailyStreak]);
+
+  useEffect(() => {
+    return () => {
+      if (pulseTimerRef.current !== null) {
+        window.clearTimeout(pulseTimerRef.current);
+      }
+    };
+  }, []);
+
   return (
-    <header className="w-full bg-[#0b0d12] border-b-[3px] border-[#f8fafc] px-2 py-1 shrink-0 flex flex-wrap items-center justify-between gap-1.5 overflow-x-hidden">
+    <header className="klasik-top-hud w-full bg-[#0b0d12] border-b-[3px] border-[#f8fafc] px-2 py-1 shrink-0 flex flex-wrap items-center justify-between gap-1.5 overflow-x-hidden">
       {/* Compact GBA Stat Strip + Daily Goal Progress Bar */}
-      <div className="gba-frame px-2 py-1 flex flex-wrap items-center gap-2 shrink-0">
+      <div className="gba-frame px-2 py-0.5 flex flex-wrap items-center gap-1.5 shrink-0">
         {/* Live Real-Time Clock */}
-        <div className="flex items-center gap-1" title="Real-Time Local Clock">
+        <div className="flex items-center gap-1">
           <span
             data-testid="hud-real-clock"
-            className="text-[9px] font-['Press_Start_2P'] text-[#7dd3fc] tabular-nums"
+            className="text-[8px] font-['Press_Start_2P'] text-[#7dd3fc] tabular-nums"
           >
             🕒 {hud.realClock}
           </span>
         </div>
 
-        <div className="w-[2px] h-4 bg-[#334155]" />
+        <div className="w-[2px] h-3.5 bg-[#334155]" />
+
+        {/* Barista Name Badge */}
+        <div className="flex items-center gap-1">
+          <span
+            data-testid="hud-barista-name"
+            className="text-[8px] font-['Press_Start_2P'] text-[#fde047]"
+          >
+            👤 {hud.appearance.name.toUpperCase()}
+          </span>
+        </div>
+
+        <div className="w-[2px] h-3.5 bg-[#334155]" />
 
         {/* Cozy Rating */}
         <div className="flex items-center gap-1">
-          <span className="text-[8px] font-['Press_Start_2P'] text-[#94a3b8]">COZY</span>
+          <span className="text-[7px] font-['Press_Start_2P'] text-[#94a3b8]">COZY</span>
           <span
             data-testid="hud-cozy-rating"
-            className="text-xs font-['Press_Start_2P'] text-[#f8fafc] tabular-nums"
+            className="text-[10px] font-['Press_Start_2P'] text-[#f8fafc] tabular-nums"
           >
             {Math.round(hud.cozyRating)}%
           </span>
         </div>
 
-        <div className="w-[2px] h-4 bg-[#334155]" />
+        <div className="w-[2px] h-3.5 bg-[#334155]" />
 
         {/* Hearts */}
         <div className="flex items-center gap-1">
           <span className="text-[8px] font-['Press_Start_2P'] text-[#fb7185]">♥</span>
           <span
             data-testid="hud-hearts"
-            className="text-xs font-['Press_Start_2P'] text-[#fb7185] tabular-nums"
+            className="text-[10px] font-['Press_Start_2P'] text-[#fb7185] tabular-nums"
           >
             {Math.round(hud.hearts)}
           </span>
         </div>
 
-        <div className="w-[2px] h-4 bg-[#334155]" />
+        <div className="w-[2px] h-3.5 bg-[#334155]" />
 
-        {/* Coins */}
+        {/* Coins & Stock */}
         <div className="flex items-center gap-1">
           <span className="text-[8px] font-['Press_Start_2P'] text-[#facc15]">$</span>
           <span
             data-testid="hud-coins"
-            className="text-xs font-['Press_Start_2P'] text-[#facc15] tabular-nums"
+            className="text-[10px] font-['Press_Start_2P'] text-[#facc15] tabular-nums"
           >
             {Math.round(hud.coins)}
           </span>
         </div>
 
-        <div className="w-[2px] h-4 bg-[#334155]" />
+        <div className="w-[2px] h-3.5 bg-[#334155]" />
+
+        {/* Ingredient Stock Readout */}
+        <div className="flex items-center gap-1">
+          <span className="text-[7px] font-['Press_Start_2P'] text-[#94a3b8]">STK</span>
+          <span
+            data-testid="hud-stock"
+            className={`text-[10px] font-['Press_Start_2P'] tabular-nums ${
+              hud.finance.ingredientStock > 0 ? 'text-[#4ade80]' : 'text-[#fb7185]'
+            }`}
+          >
+            {hud.finance.ingredientStock}
+          </span>
+        </div>
+
+        <div className="w-[2px] h-3.5 bg-[#334155]" />
+
+        {/* Daily Streak Counter with Flame Icon */}
+        <div
+          data-testid="hud-daily-streak"
+          className="flex items-center gap-1"
+          aria-label={`Daily Streak ${hud.dailyStreak}`}
+        >
+          <Flame
+            key={isFlamePulsing ? `pulse-${flamePulseKey}` : 'idle'}
+            data-testid="hud-streak-flame"
+            data-animating={isFlamePulsing ? 'true' : 'false'}
+            className={`w-3.5 h-3.5 shrink-0 ${
+              hud.dailyStreak > 0 ? 'text-[#fb923c]' : 'text-[#64748b]'
+            } ${isFlamePulsing ? 'klasik-flame-pulse' : ''}`}
+            fill={hud.dailyStreak > 0 ? '#f97316' : 'none'}
+            strokeWidth={2.25}
+          />
+          <span className="text-[7px] font-['Press_Start_2P'] text-[#94a3b8] hidden sm:inline">
+            STREAK
+          </span>
+          <span
+            data-testid="hud-streak-count"
+            className={`text-[10px] font-['Press_Start_2P'] tabular-nums ${
+              hud.dailyStreak > 0 ? 'text-[#fdba74]' : 'text-[#94a3b8]'
+            }`}
+          >
+            {Math.round(hud.dailyStreak)}
+          </span>
+        </div>
+
+        <div className="w-[2px] h-3.5 bg-[#334155]" />
 
         {/* Daily Goal Progress Bar Component */}
         <DailyGoalProgressBar
@@ -157,13 +265,13 @@ export const TopHudBar: React.FC<TopHudBarProps> = ({
       </div>
 
       {/* Center Classic Pokémon GBA White/Charcoal Dialogue & Recipe Guide Box */}
-      <div className="gba-dialogue-box px-2.5 py-1 flex-1 min-w-[190px] max-w-md hidden xl:flex items-center justify-between gap-2">
+      <div className="gba-dialogue-box px-2.5 py-0.5 flex-1 min-w-[180px] max-w-md hidden xl:flex items-center justify-between gap-2">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <span className="text-[8px] font-['Press_Start_2P'] text-[#0f172a] uppercase truncate">
               {orderRecipe
-                ? `${hud.waitingCustomerName}: ${orderRecipe.name}`
-                : 'KLASIK GARAGE LOG'}
+                ? `${hud.appearance.name.toUpperCase()} -> ${hud.waitingCustomerName}: ${orderRecipe.name}`
+                : `${hud.appearance.name.toUpperCase()}'S BAR LOG`}
             </span>
             <span className="text-[8px] font-['Press_Start_2P'] px-1.5 py-0.5 bg-[#0f172a] text-[#facc15] tabular-nums">
               STEP {Math.round(hud.currentStepIndex)}/3
@@ -186,20 +294,79 @@ export const TopHudBar: React.FC<TopHudBarProps> = ({
         </span>
       </div>
 
-      {/* Right Room, Time, Weather, Staff Hire, Stations Drawer, Audio & Utility Controls */}
-      <div className="gba-frame px-1.5 py-1 flex flex-wrap items-center gap-1 shrink-0">
+      {/* Right Hero, Menu, Biz & Shop, App/APK, Room, Time, Weather, Staff Hire, Audio & Utility Controls */}
+      <div className="gba-frame px-1.5 py-0.5 flex flex-wrap items-center gap-1 shrink-0">
+        {/* Character Customize Modal [👤 HERO] */}
+        <button
+          type="button"
+          tabIndex={-1}
+          data-testid="hud-customize-btn"
+          aria-label="Customize Barista Hero"
+          onClick={(e) => {
+            e.currentTarget.blur();
+            onOpenCustomize();
+          }}
+          className="gba-btn px-1.5 h-6 flex items-center justify-center text-[#fde047] cursor-pointer whitespace-nowrap"
+        >
+          <span className="text-[9px]">👤 HERO</span>
+        </button>
+
+        {/* 1-Tap Recipe & Profit Margin Guide [📖 MENU] */}
+        <button
+          type="button"
+          tabIndex={-1}
+          data-testid="hud-menu-btn"
+          aria-label="Open Recipe and Profit Margin Guide"
+          onClick={(e) => {
+            e.currentTarget.blur();
+            onOpenMenuModal();
+          }}
+          className="gba-btn px-1.5 h-6 flex items-center justify-center text-[#7dd3fc] cursor-pointer whitespace-nowrap"
+        >
+          <span className="text-[9px]">📖 MENU</span>
+        </button>
+
+        {/* Business Economics, Staff & Shop Modal [📊 BIZ & SHOP] */}
+        <button
+          type="button"
+          tabIndex={-1}
+          data-testid="hud-biz-btn"
+          aria-label="Open Business Economics, Staff and Shop Modal"
+          onClick={(e) => {
+            e.currentTarget.blur();
+            onOpenBizModal();
+          }}
+          className="gba-btn px-1.5 h-6 flex items-center justify-center text-[#4ade80] cursor-pointer whitespace-nowrap"
+        >
+          <span className="text-[9px]">📊 BIZ &amp; SHOP</span>
+        </button>
+
+        {/* Offline PWA & Android APK Modal [📲 APP / APK] */}
+        <button
+          type="button"
+          tabIndex={-1}
+          data-testid="hud-pwa-btn"
+          aria-label="Open Offline PWA and Android APK Modal"
+          onClick={(e) => {
+            e.currentTarget.blur();
+            onOpenPwaModal();
+          }}
+          className="gba-btn px-1.5 h-6 flex items-center justify-center text-[#f87171] cursor-pointer whitespace-nowrap"
+        >
+          <span className="text-[9px]">📲 APP / APK</span>
+        </button>
+
         {/* Room Map Switcher [V] */}
         <button
           type="button"
           tabIndex={-1}
           data-testid="hud-room-btn"
           aria-label="Switch Room Map (INSIDE / GARDEN) [V]"
-          title="Switch Room Map (INSIDE / GARDEN) [V]"
           onClick={(e) => {
             e.currentTarget.blur();
             onToggleRoom();
           }}
-          className="gba-btn px-2 h-6 flex items-center justify-center text-[#7dd3fc] cursor-pointer whitespace-nowrap"
+          className="gba-btn px-1.5 h-6 flex items-center justify-center text-[#7dd3fc] cursor-pointer whitespace-nowrap"
         >
           <span className="text-[8px]">{roomLabels[hud.room]}</span>
         </button>
@@ -210,12 +377,11 @@ export const TopHudBar: React.FC<TopHudBarProps> = ({
           tabIndex={-1}
           data-testid="hud-time-btn"
           aria-label="Cycle Time of Day (DAY / SUNSET / NIGHT) [T]"
-          title="Cycle Time of Day (DAY / SUNSET / NIGHT) [T]"
           onClick={(e) => {
             e.currentTarget.blur();
             onCycleTimeOfDay();
           }}
-          className="gba-btn px-2 h-6 flex items-center justify-center text-[#fde047] cursor-pointer whitespace-nowrap"
+          className="gba-btn px-1.5 h-6 hidden md:flex items-center justify-center text-[#fde047] cursor-pointer whitespace-nowrap"
         >
           <span className="text-[8px]">{timeLabels[hud.timeOfDay]}</span>
         </button>
@@ -226,12 +392,11 @@ export const TopHudBar: React.FC<TopHudBarProps> = ({
           tabIndex={-1}
           data-testid="hud-weather-btn"
           aria-label="Cycle Weather (CLEAR / BREEZE / RAIN) [G]"
-          title="Cycle Weather (CLEAR / BREEZE / RAIN) [G]"
           onClick={(e) => {
             e.currentTarget.blur();
             onCycleWeather();
           }}
-          className={`gba-btn px-2 h-6 flex items-center justify-center cursor-pointer whitespace-nowrap ${
+          className={`gba-btn px-1.5 h-6 hidden md:flex items-center justify-center cursor-pointer whitespace-nowrap ${
             hud.weather === 'rain' ? 'gba-btn-active' : 'text-[#86efac]'
           }`}
         >
@@ -244,11 +409,6 @@ export const TopHudBar: React.FC<TopHudBarProps> = ({
           tabIndex={-1}
           data-testid="hud-hire-staff-btn"
           aria-label="Hire Cafe Staff [K]"
-          title={
-            hud.nextStaffName
-              ? `Hire ${hud.nextStaffName} ($${hud.nextStaffCost}) [K]`
-              : 'All 2 Cafe Staff Hired!'
-          }
           onClick={(e) => {
             e.currentTarget.blur();
             onHireStaff();
@@ -258,7 +418,7 @@ export const TopHudBar: React.FC<TopHudBarProps> = ({
           }`}
         >
           <span className="text-[8px]">
-            👩‍🍳 STAFF ({hud.hiredStaffCount}/2)
+            👩‍🍳 HIRE STAFF ({hud.hiredStaffCount}/2)
             {hud.nextStaffCost !== null ? ` · $${hud.nextStaffCost}` : ' ★'}
           </span>
         </button>
@@ -274,7 +434,7 @@ export const TopHudBar: React.FC<TopHudBarProps> = ({
             e.currentTarget.blur();
             onToggleDock();
           }}
-          className={`gba-btn px-1.5 h-6 flex items-center justify-center cursor-pointer whitespace-nowrap ${
+          className={`gba-btn px-1.5 h-6 hidden sm:flex items-center justify-center cursor-pointer whitespace-nowrap ${
             !dockCollapsed ? 'gba-btn-active' : 'text-[#facc15]'
           }`}
         >
@@ -286,12 +446,11 @@ export const TopHudBar: React.FC<TopHudBarProps> = ({
           type="button"
           tabIndex={-1}
           aria-label={hud.bgmEnabled ? 'Mute 8-Bit BGM [B]' : 'Play 8-Bit BGM [B]'}
-          title="Toggle 8-Bit Mono Chiptune BGM [B]"
           onClick={(e) => {
             e.currentTarget.blur();
             onToggleBgm();
           }}
-          className={`gba-btn px-1.5 h-6 flex items-center justify-center cursor-pointer whitespace-nowrap ${
+          className={`gba-btn px-1.5 h-6 hidden lg:flex items-center justify-center cursor-pointer whitespace-nowrap ${
             hud.bgmEnabled ? 'gba-btn-active' : ''
           }`}
         >
@@ -303,12 +462,11 @@ export const TopHudBar: React.FC<TopHudBarProps> = ({
           type="button"
           tabIndex={-1}
           aria-label={hud.muted ? 'Unmute SFX [M]' : 'Mute SFX [M]'}
-          title="Toggle SFX [M]"
           onClick={(e) => {
             e.currentTarget.blur();
             onToggleMute();
           }}
-          className="gba-btn px-1.5 h-6 flex items-center justify-center cursor-pointer whitespace-nowrap"
+          className="gba-btn px-1.5 h-6 hidden lg:flex items-center justify-center cursor-pointer whitespace-nowrap"
         >
           <span className="text-[8px]">🔊 SFX:{hud.muted ? 'OFF' : 'ON'}</span>
         </button>
@@ -318,7 +476,6 @@ export const TopHudBar: React.FC<TopHudBarProps> = ({
           type="button"
           tabIndex={-1}
           aria-label="View Single-File HTML Code"
-          title="View Single-File HTML Code"
           onClick={(e) => {
             e.currentTarget.blur();
             onOpenCodeModal();
@@ -333,7 +490,6 @@ export const TopHudBar: React.FC<TopHudBarProps> = ({
           type="button"
           tabIndex={-1}
           aria-label="Pause Game [P]"
-          title="Pause Game [P]"
           onClick={(e) => {
             e.currentTarget.blur();
             onPause();
@@ -348,7 +504,6 @@ export const TopHudBar: React.FC<TopHudBarProps> = ({
           type="button"
           tabIndex={-1}
           aria-label="Restart Shift [R]"
-          title="Restart Shift [R]"
           onClick={(e) => {
             e.currentTarget.blur();
             onRestart();
@@ -367,23 +522,26 @@ interface FloatingCanvasQuickBarProps {
   onSmartStep: () => void;
   onWaterAllDaisies: () => void;
   onHireStaff: () => void;
+  onOpenBizModal: () => void;
   onPetCats: () => void;
   onToggleRoom: () => void;
 }
 
 /**
- * Touch-friendly floating quick-action buttons positioned in the bottom-right corner
- * of the canvas stage so mobile & landscape players can play effortlessly with the bottom dock hidden by default!
+ * Slim corner action buttons positioned in the bottom-right corner of the viewport
+ * so mobile & landscape players can play without blocking the South Doorway or tables.
  */
 export const FloatingCanvasQuickBar: React.FC<FloatingCanvasQuickBarProps> = ({
   hud,
   onSmartStep,
   onWaterAllDaisies,
   onHireStaff,
+  onOpenBizModal,
   onPetCats,
   onToggleRoom,
 }) => {
   const orderRecipe = hud.waitingCustomerOrder ? RECIPES[hud.waitingCustomerOrder] : null;
+  const canAffordStaff = hud.nextStaffCost !== null && hud.coins >= hud.nextStaffCost;
 
   let smartLabel = '⚡ BREW / SERVE';
   if (hud.currentStepIndex === 3) {
@@ -404,7 +562,7 @@ export const FloatingCanvasQuickBar: React.FC<FloatingCanvasQuickBarProps> = ({
   }
 
   return (
-    <div className="pointer-events-auto flex flex-wrap items-center justify-end gap-1.5">
+    <div className="klasik-quick-bar pointer-events-auto flex flex-wrap items-center justify-end gap-1">
       <button
         type="button"
         data-testid="quick-smart-step-btn"
@@ -412,9 +570,24 @@ export const FloatingCanvasQuickBar: React.FC<FloatingCanvasQuickBarProps> = ({
           e.currentTarget.blur();
           onSmartStep();
         }}
-        className="gba-btn gba-btn-active px-2.5 py-1.5 text-[9px] cursor-pointer shadow-lg"
+        className="gba-btn gba-btn-active px-2 py-1 text-[8px] sm:text-[9px] cursor-pointer shadow-lg"
       >
         {smartLabel}
+      </button>
+
+      <button
+        type="button"
+        data-testid="quick-hire-staff-btn"
+        onClick={(e) => {
+          e.currentTarget.blur();
+          onHireStaff();
+        }}
+        className={`gba-btn px-2 py-1 text-[8px] sm:text-[9px] cursor-pointer shadow-lg ${
+          canAffordStaff ? 'gba-btn-active' : 'text-[#fb7185]'
+        }`}
+      >
+        👩‍🍳 HIRE STAFF ({hud.hiredStaffCount}/2)
+        {hud.nextStaffCost !== null ? ` $${hud.nextStaffCost}` : ' ★'}
       </button>
 
       <button
@@ -424,21 +597,21 @@ export const FloatingCanvasQuickBar: React.FC<FloatingCanvasQuickBarProps> = ({
           e.currentTarget.blur();
           onWaterAllDaisies();
         }}
-        className="gba-btn px-2 py-1.5 text-[9px] text-[#7dd3fc] cursor-pointer shadow-lg"
+        className="gba-btn px-2 py-1 text-[8px] sm:text-[9px] text-[#7dd3fc] cursor-pointer shadow-lg"
       >
         💧 WATER {hud.thirstyDaisyCount > 0 ? `(${hud.thirstyDaisyCount})` : ''}
       </button>
 
       <button
         type="button"
-        data-testid="quick-hire-btn"
+        data-testid="quick-biz-btn"
         onClick={(e) => {
           e.currentTarget.blur();
-          onHireStaff();
+          onOpenBizModal();
         }}
-        className="gba-btn px-2 py-1.5 text-[9px] text-[#86efac] cursor-pointer shadow-lg"
+        className="gba-btn px-2 py-1 text-[8px] sm:text-[9px] text-[#4ade80] cursor-pointer shadow-lg"
       >
-        👩‍🍳 HIRE ({hud.hiredStaffCount}/2)
+        📊 BIZ &amp; SHOP
       </button>
 
       <button
@@ -448,9 +621,9 @@ export const FloatingCanvasQuickBar: React.FC<FloatingCanvasQuickBarProps> = ({
           e.currentTarget.blur();
           onPetCats();
         }}
-        className="gba-btn px-2 py-1.5 text-[9px] text-[#fb7185] cursor-pointer shadow-lg"
+        className="gba-btn px-2 py-1 text-[8px] sm:text-[9px] text-[#fb7185] cursor-pointer shadow-lg"
       >
-        🐾 PET CAT
+        🐾 CATS
       </button>
 
       <button
@@ -460,9 +633,9 @@ export const FloatingCanvasQuickBar: React.FC<FloatingCanvasQuickBarProps> = ({
           e.currentTarget.blur();
           onToggleRoom();
         }}
-        className="gba-btn px-2 py-1.5 text-[9px] text-[#facc15] cursor-pointer shadow-lg"
+        className="gba-btn px-2 py-1 text-[8px] sm:text-[9px] text-[#facc15] cursor-pointer shadow-lg"
       >
-        🚪 {hud.room === 'inside' ? 'TO GARDEN' : 'TO INSIDE'}
+        🚪 {hud.room === 'inside' ? 'GARDEN' : 'INSIDE'}
       </button>
     </div>
   );
@@ -552,7 +725,6 @@ export const BottomActionDock: React.FC<BottomActionDockProps> = ({
         onClick={() => onTriggerStation('cup_counter')}
       />
 
-      {/* Serve Drink Action */}
       <button
         type="button"
         onClick={(e) => {
@@ -576,7 +748,6 @@ export const BottomActionDock: React.FC<BottomActionDockProps> = ({
         </div>
       </button>
 
-      {/* Water Daisies Action */}
       <button
         type="button"
         onClick={(e) => {
@@ -598,7 +769,6 @@ export const BottomActionDock: React.FC<BottomActionDockProps> = ({
         </div>
       </button>
 
-      {/* 1990 Miata MX-5 Pop-Up Headlights Toggle */}
       <button
         type="button"
         onClick={(e) => {
@@ -616,7 +786,6 @@ export const BottomActionDock: React.FC<BottomActionDockProps> = ({
         </div>
       </button>
 
-      {/* Pet Cats Lilo & Champy */}
       <button
         type="button"
         onClick={(e) => {

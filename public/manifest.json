@@ -1,0 +1,26 @@
+{
+  "id": "/",
+  "name": "Klasik — Garage Garden Cafe",
+  "short_name": "Klasik Cafe",
+  "description": "A cozy Gameboy Advance pixel-art Garden Garage Cafe management game featuring a 1990 Mazda Miata MX-5, Lilo & Champy cats, and realistic coffee prep.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "landscape",
+  "background_color": "#07090e",
+  "theme_color": "#dc2626",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}
