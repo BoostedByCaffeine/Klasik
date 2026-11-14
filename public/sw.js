@@ -1,4 +1,4 @@
-const CACHE_NAME = 'klasik-cafe-pwa-v3';
+const CACHE_NAME = 'klasik-vite-pwa-v3';
 const PRECACHE_URLS = [
   './',
   './index.html',

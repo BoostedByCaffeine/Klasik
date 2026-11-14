@@ -62,8 +62,8 @@ export const KLASIK_MANIFEST_JSON_STRING = JSON.stringify(
   2
 );
 
-export const KLASIK_SW_JS_SOURCE = `const CACHE_NAME = 'klasik-cafe-pwa-v3';
-const PRECACHE_URLS = ['./', './index.html', './manifest.json'];
+export const KLASIK_SW_JS_SOURCE = `const CACHE_NAME = 'klasik-vite-pwa-v3';
+const PRECACHE_URLS = ['./', './index.html', './manifest.json', './icon.svg'];
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
@@ -172,7 +172,11 @@ export async function initKlasikPwa(): Promise<{
       const keys = await caches.keys();
       await Promise.all(
         keys
-          .filter((k) => k.startsWith('klasik-cafe-pwa-') && k !== 'klasik-cafe-pwa-v3')
+          .filter(
+            (k) =>
+              (k.startsWith('klasik-cafe-pwa-') || k.startsWith('klasik-vite-pwa-')) &&
+              k !== 'klasik-vite-pwa-v3'
+          )
           .map((k) => caches.delete(k))
       );
     }

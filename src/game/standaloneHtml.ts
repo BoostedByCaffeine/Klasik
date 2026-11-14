@@ -296,7 +296,7 @@ export const STANDALONE_KLASIK_HTML = `<!DOCTYPE html>
       </div>
       <div style="background:#090b0e; border:2px solid #334155; padding:10px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
         <div>
-          <div style="font-family:'Silkscreen','Courier New',monospace; font-size:9px; color:#4ade80;" id="pwa-status-txt">✓ SUBPATH-SAFE PWA READY (klasik-cafe-pwa-v3)</div>
+          <div style="font-family:'Silkscreen','Courier New',monospace; font-size:9px; color:#4ade80;" id="pwa-status-txt">✓ SUBPATH-SAFE PWA READY (klasik-vite-pwa-v3)</div>
           <div style="font-size:17px; color:#cbd5e1;">Standalone Fullscreen Landscape Mode + Red Coffee Cup Icon</div>
         </div>
         <button class="gba-btn gba-btn-active" id="pwa-install-now-btn" style="padding:7px 12px; font-size:9px;">📲 INSTALL APP</button>
@@ -409,7 +409,7 @@ export const STANDALONE_KLASIK_HTML = `<!DOCTYPE html>
       icons: [{ src: 'data:image/svg+xml;utf8,' + encodeURIComponent(RED_CUP_SVG), sizes: '512x512', type: 'image/svg+xml', purpose: 'any maskable' }]
     };
     const MANIFEST_EXPORT_OBJ = Object.assign({}, MANIFEST_BLOB_OBJ, { start_url: './', scope: './' });
-    const SW_SOURCE = "const CACHE='klasik-cafe-pwa-v3';const URLS=['./','./index.html','./manifest.json'];self.addEventListener('install',e=>{self.skipWaiting();e.waitUntil(caches.open(CACHE).then(async c=>{for(const u of URLS){try{const r=await fetch(u,{cache:'no-cache'});if(r&&r.ok&&r.status===200)await c.put(u,r);}catch{}}}))});self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(ks=>Promise.all(ks.map(k=>k!==CACHE?caches.delete(k):Promise.resolve()))).then(()=>self.clients.claim())));self.addEventListener('fetch',e=>{if(e.request.method!=='GET')return;if(e.request.mode==='navigate'||(e.request.headers.get('accept')||'').includes('text/html')){e.respondWith(fetch(e.request).then(r=>{if(r&&r.ok&&r.status===200){const cp=r.clone();caches.open(CACHE).then(c=>c.put(e.request,cp).catch(()=>{}));}return r;}).catch(()=>caches.match(e.request).then(r=>r||caches.match('./index.html')||caches.match('./'))));return;}e.respondWith(caches.match(e.request).then(cached=>{const net=fetch(e.request).then(r=>{if(r&&r.ok&&r.status===200){const cp=r.clone();caches.open(CACHE).then(c=>c.put(e.request,cp).catch(()=>{}));}return r;}).catch(()=>cached);return cached||net;}));});";
+    const SW_SOURCE = "const CACHE='klasik-vite-pwa-v3';const URLS=['./','./index.html','./manifest.json','./icon.svg'];self.addEventListener('install',e=>{self.skipWaiting();e.waitUntil(caches.open(CACHE).then(async c=>{for(const u of URLS){try{const r=await fetch(u,{cache:'no-cache'});if(r&&r.ok&&r.status===200)await c.put(u,r);}catch{}}}))});self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(ks=>Promise.all(ks.map(k=>k!==CACHE?caches.delete(k):Promise.resolve()))).then(()=>self.clients.claim())));self.addEventListener('fetch',e=>{if(e.request.method!=='GET')return;if(e.request.mode==='navigate'||(e.request.headers.get('accept')||'').includes('text/html')){e.respondWith(fetch(e.request).then(r=>{if(r&&r.ok&&r.status===200){const cp=r.clone();caches.open(CACHE).then(c=>c.put(e.request,cp).catch(()=>{}));}return r;}).catch(()=>caches.match(e.request).then(r=>r||caches.match('./index.html')||caches.match('./'))));return;}e.respondWith(caches.match(e.request).then(cached=>{const net=fetch(e.request).then(r=>{if(r&&r.ok&&r.status===200){const cp=r.clone();caches.open(CACHE).then(c=>c.put(e.request,cp).catch(()=>{}));}return r;}).catch(()=>cached);return cached||net;}));});";
 
     try {
       const mBlob = new Blob([JSON.stringify(MANIFEST_BLOB_OBJ, null, 2)], { type: 'application/manifest+json' });
@@ -425,7 +425,7 @@ export const STANDALONE_KLASIK_HTML = `<!DOCTYPE html>
         if ('caches' in window) {
           const keys = await caches.keys();
           await Promise.all(
-            keys.filter(k => k.indexOf('klasik-cafe-pwa-') === 0 && k !== 'klasik-cafe-pwa-v3').map(k => caches.delete(k))
+            keys.filter(k => (k.indexOf('klasik-cafe-pwa-') === 0 || k.indexOf('klasik-vite-pwa-') === 0) && k !== 'klasik-vite-pwa-v3').map(k => caches.delete(k))
           );
         }
         if ('serviceWorker' in navigator && window.location.protocol.indexOf('http') === 0) {
