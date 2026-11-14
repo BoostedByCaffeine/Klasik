@@ -4,6 +4,7 @@ import {
   KLASIK_SW_JS_SOURCE,
   RED_COFFEE_CUP_DATA_URI,
   downloadTextAsset,
+  isStandaloneApp,
 } from '../pwa/pwaManager';
 import { STANDALONE_KLASIK_HTML } from '../game/standaloneHtml';
 
@@ -24,6 +25,10 @@ export const PwaApkModal: React.FC<PwaApkModalProps> = ({
 }) => {
   const [statusNote, setStatusNote] = useState<string | null>(null);
   const isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
+
+  if (isStandaloneApp()) {
+    return null;
+  }
 
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {

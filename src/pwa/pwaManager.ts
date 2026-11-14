@@ -136,6 +136,35 @@ export function triggerHaptic(durationMs = 15): void {
 }
 
 /**
+ * Reliable environment detector returning `true` when running as an installed
+ * Standalone/Fullscreen/Minimal-UI PWA, iOS Home Screen Web App, or Android TWA `.apk`.
+ */
+export function isStandaloneApp(): boolean {
+  try {
+    if (typeof window !== 'undefined') {
+      if (typeof window.matchMedia === 'function') {
+        if (window.matchMedia('(display-mode: standalone)').matches) return true;
+        if (window.matchMedia('(display-mode: fullscreen)').matches) return true;
+        if (window.matchMedia('(display-mode: minimal-ui)').matches) return true;
+      }
+      if ((window.navigator as unknown as { standalone?: boolean })?.standalone === true) {
+        return true;
+      }
+    }
+    if (
+      typeof document !== 'undefined' &&
+      typeof document.referrer === 'string' &&
+      document.referrer.startsWith('android-app://')
+    ) {
+      return true;
+    }
+  } catch {
+    // Ignore restricted environment checks
+  }
+  return false;
+}
+
+/**
  * Attaches an inline Blob Web App Manifest (with absolute start_url & scope so Blob URLs never error)
  * and safely registers `./sw.js` only if it exists on the server, purging stale v1/v2 caches.
  */

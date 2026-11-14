@@ -20,6 +20,7 @@ interface BizUpgradesModalProps {
   decorOwned: Record<DecorItemId, boolean>;
   decorEquipped: Record<DecorItemId, boolean>;
   onRestockWholesale: () => void;
+  onToggleAutoRestock?: () => void;
   onHireStaffById: (staffId: 'momo' | 'ken') => void;
   onUpgradeStation: (stationId: UpgradableStationId) => void;
   onPurchaseOrToggleDecor: (decorId: DecorItemId) => void;
@@ -38,6 +39,7 @@ export const BizUpgradesModal: React.FC<BizUpgradesModalProps> = ({
   decorOwned,
   decorEquipped,
   onRestockWholesale,
+  onToggleAutoRestock,
   onHireStaffById,
   onUpgradeStation,
   onPurchaseOrToggleDecor,
@@ -181,16 +183,34 @@ export const BizUpgradesModal: React.FC<BizUpgradesModalProps> = ({
             </p>
           </div>
 
-          <button
-            type="button"
-            data-testid="wholesale-restock-btn"
-            onClick={onRestockWholesale}
-            className={`gba-btn px-2.5 py-1.5 text-[8px] cursor-pointer whitespace-nowrap ${
-              canAffordRestock ? 'gba-btn-active' : 'opacity-75'
-            }`}
-          >
-            +10 WHOLESALE STOCK ($20)
-          </button>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {onToggleAutoRestock && (
+              <button
+                type="button"
+                data-testid="wholesale-auto-restock-toggle"
+                aria-pressed={Boolean(finance.autoRestock)}
+                onClick={onToggleAutoRestock}
+                className={`gba-btn px-2.5 py-1.5 text-[8px] cursor-pointer whitespace-nowrap ${
+                  finance.autoRestock
+                    ? 'bg-[#166534] text-[#86efac] border-[#4ade80]'
+                    : 'text-[#cbd5e1]'
+                }`}
+              >
+                AUTO-RESTOCK ($20 / +10 STK): {finance.autoRestock ? 'ON' : 'OFF'}
+              </button>
+            )}
+
+            <button
+              type="button"
+              data-testid="wholesale-restock-btn"
+              onClick={onRestockWholesale}
+              className={`gba-btn px-2.5 py-1.5 text-[8px] cursor-pointer whitespace-nowrap ${
+                canAffordRestock ? 'gba-btn-active' : 'opacity-75'
+              }`}
+            >
+              +10 WHOLESALE STOCK ($20)
+            </button>
+          </div>
         </div>
 
         {/* Filter Tabs */}

@@ -36,11 +36,18 @@ import {
   isOutfitUnlocked,
   BARISTA_OUTFITS,
   INSIDE_DOOR_MAT,
+  INDOOR_TABLES,
+  GARDEN_TABLES,
+  ALL_CUSTOMER_SEATS,
+  TIP_JAR_BOUNDS,
+  getPartySeatedPositions,
+  toggleWholesaleAutoRestock,
   CAFE_SAVE_KEY_V2,
   saveCafeProgressV2,
   loadCafeProgressV2,
   resetCafeProgressV2,
 } from './rules';
+import { isStandaloneApp } from '../pwa/pwaManager';
 
 test('automatic local save (klasik_cafe_save_v2) persists and restores progress and supports reset', () => {
   const store = new Map<string, string>();
@@ -329,3 +336,124 @@ test('character customization, wholesale restock, capital upgrades, and daily st
   assert.equal(shift1.dailyStreak, 1);
   assert.equal(isOutfitUnlocked(sepia, state.dailyStreak), true);
 });
+
+test('precision chair-slot seating assigns leftChair, rightChair, topChair, petMatSpot, and tabletop cup positions', () => {
+  // Verify explicit chair slot offsets on INDOOR_TABLES and GARDEN_TABLES
+  for (const t of [...INDOOR_TABLES, ...GARDEN_TABLES]) {
+    assert.deepEqual(t.leftChair, { x: t.x - 32, y: t.y - 4, facing: 'right' });
+    assert.deepEqual(t.rightChair, { x: t.x + 32, y: t.y - 4, facing: 'left' });
+    assert.deepEqual(t.topChair, { x: t.x, y: t.y - 26, facing: 'down' });
+    assert.deepEqual(t.petMatSpot, { x: t.x - 46, y: t.y + 12 });
+  }
+
+  // Verify chair slots and petMatSpot never overlap table colliders
+  for (const seat of ALL_CUSTOMER_SEATS) {
+    assert.equal(hitsCollider(seat.leftChair.x, seat.leftChair.y, seat.room, 8), null);
+    assert.equal(hitsCollider(seat.rightChair.x, seat.rightChair.y, seat.room, 8), null);
+    assert.equal(hitsCollider(seat.topChair.x, seat.topChair.y, seat.room, 8), null);
+    assert.equal(hitsCollider(seat.petMatSpot.x, seat.petMatSpot.y, seat.room, 6), null);
+  }
+
+  // Test 3-member Family party with pet seated at Table 0
+  const familyParty = createCustomerParty(3, 0, 0, true);
+  assert.equal(familyParty.partyKind, 'family');
+  assert.equal(familyParty.partySize, 3);
+  assert.equal(familyParty.companions[1].name, 'Jr');
+  familyParty.pet = {
+    kind: 'dog',
+    name: 'Mochi',
+    x: 100,
+    y: 350,
+    facing: 'right',
+    heartTimer: 0,
+  };
+  familyParty.seatIndex = 0;
+  familyParty.state = 'sipping';
+
+  const seated = getPartySeatedPositions(familyParty)!;
+  const table0 = INDOOR_TABLES[0];
+  assert.deepEqual(seated.leader, { x: table0.x - 32, y: table0.y - 4, facing: 'right' });
+  assert.deepEqual(seated.companions[0], { x: table0.x + 32, y: table0.y - 4, facing: 'left' });
+  assert.deepEqual(seated.companions[1], { x: table0.x, y: table0.y - 26, facing: 'down' });
+  assert.deepEqual(seated.petSpot, { x: table0.x - 46, y: table0.y + 12 });
+  assert.deepEqual(seated.cupPositions[0], { x: table0.x - 10, y: table0.y - 6 });
+  assert.deepEqual(seated.cupPositions[1], { x: table0.x + 10, y: table0.y - 6 });
+
+  // Simulate customer arriving at leftChair and finishing 20-30s stay -> clears chair reservation
+  const state = createInitialCafeState(true);
+  familyParty.x = table0.leftChair.x;
+  familyParty.y = table0.leftChair.y;
+  familyParty.targetX = table0.leftChair.x;
+  familyParty.targetY = table0.leftChair.y;
+  familyParty.waypoints = [{ x: table0.leftChair.x, y: table0.leftChair.y }];
+  familyParty.sipTimer = 0.05;
+  state.customers = [familyParty];
+
+  advanceCustomersSimulation(state, 0.1);
+  assert.equal(familyParty.state, 'walking_out');
+  assert.equal(familyParty.seatIndex, null);
+  assert.equal(familyParty.tableX, undefined);
+  assert.equal(familyParty.tableY, undefined);
+});
+
+test('wholesale auto-restock and tip jar proximity auto-collect work automatically', () => {
+  const state = createInitialCafeState(true);
+  state.coins = 50;
+  state.finance.ingredientStock = 1;
+
+  // Enable Wholesale Auto-Restock
+  assert.equal(toggleWholesaleAutoRestock(state), true);
+  assert.equal(state.finance.autoRestock, true);
+
+  // Serve 1 drink so stock drops from 1 -> 0; Auto-Restock immediately buys +10 stock for $20!
+  state.prep.activeDrink = 'miata_mocha';
+  state.prep.currentStepIndex = 3;
+  const serveRes = serveWaitingCustomer(state);
+  assert.equal(serveRes.served, true);
+  assert.equal(serveRes.cogsIncurred, 2.0); // Wholesale COGS, never $4.00 emergency COGS
+  assert.equal(state.finance.ingredientStock, 10);
+
+  // Tip Jar Proximity Auto-Collect: walking barista within 38px of TIP_JAR_BOUNDS collects tips automatically
+  state.tipJarCoins = 12;
+  const coinsBeforeTip = state.coins;
+  state.barista.x = TIP_JAR_BOUNDS.x + 10;
+  state.barista.y = TIP_JAR_BOUNDS.y + 10;
+  advanceEnvironmentAndHydration(state, 0.1);
+  assert.equal(state.tipJarCoins, 0);
+  assert.equal(state.coins, coinsBeforeTip + 12);
+});
+
+test('isStandaloneApp accurately detects web browser vs. installed PWA and Android TWA/APK', () => {
+  const g = globalThis as unknown as {
+    window?: unknown;
+    document?: unknown;
+  };
+  try {
+    // 1. Standard web browser -> false
+    g.window = {
+      matchMedia: () => ({ matches: false }),
+      navigator: { standalone: false },
+    };
+    g.document = { referrer: 'https://boostedbycaffeine.github.io/Klasik/' };
+    assert.equal(isStandaloneApp(), false);
+
+    // 2. Installed PWA (display-mode: standalone) -> true
+    g.window = {
+      matchMedia: (q: string) => ({ matches: q === '(display-mode: standalone)' }),
+      navigator: {},
+    };
+    assert.equal(isStandaloneApp(), true);
+
+    // 3. Android APK / TWA (android-app:// referrer) -> true
+    g.window = {
+      matchMedia: () => ({ matches: false }),
+      navigator: {},
+    };
+    g.document = { referrer: 'android-app://com.boostedbycaffeine.klasik/' };
+    assert.equal(isStandaloneApp(), true);
+  } finally {
+    delete g.window;
+    delete g.document;
+  }
+});
+

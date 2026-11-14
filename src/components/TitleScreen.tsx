@@ -145,6 +145,7 @@ interface TitleScreenProps {
   onStart: () => void;
   onOpenCustomize: () => void;
   onInstallApp: () => void;
+  isStandalone?: boolean;
 }
 
 /**
@@ -152,13 +153,14 @@ interface TitleScreenProps {
  * Contains ONLY:
  * 1. Main Title: `KLASIK`
  * 2. Subtitle: `Garage Garden Cafe`
- * 3. Action Buttons: `► START SHIFT`, `👤 CUSTOMIZE`, and `📲 INSTALL APP`
+ * 3. Action Buttons: `► START SHIFT`, `👤 CUSTOMIZE`, and (in web browser mode only) `📲 INSTALL APP`
  * 4. Bottom Studio Logo Slot: `<div id="studio-logo-slot">` displaying the BoostedByCaffeine Studios logo
  */
 export const TitleScreen: React.FC<TitleScreenProps> = ({
   onStart,
   onOpenCustomize,
   onInstallApp,
+  isStandalone = false,
 }) => {
   return (
     <div
@@ -180,7 +182,7 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
           Garage Garden Cafe
         </p>
 
-        {/* 3. Action Buttons: ► START SHIFT, 👤 CUSTOMIZE, and 📲 INSTALL APP */}
+        {/* 3. Action Buttons: ► START SHIFT, 👤 CUSTOMIZE, and (Web Browser only) 📲 INSTALL APP */}
         <div className="flex flex-wrap items-center justify-center gap-2.5 pt-1 w-full">
           <button
             type="button"
@@ -206,17 +208,19 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
             👤 CUSTOMIZE
           </button>
 
-          <button
-            type="button"
-            data-testid="title-install-app-btn"
-            onClick={(e) => {
-              e.currentTarget.blur();
-              onInstallApp();
-            }}
-            className="gba-btn px-3.5 py-2.5 text-[10px] sm:text-xs text-[#4ade80] cursor-pointer whitespace-nowrap shrink-0"
-          >
-            📲 INSTALL APP
-          </button>
+          {!isStandalone && (
+            <button
+              type="button"
+              data-testid="title-install-app-btn"
+              onClick={(e) => {
+                e.currentTarget.blur();
+                onInstallApp();
+              }}
+              className="gba-btn px-3.5 py-2.5 text-[10px] sm:text-xs text-[#4ade80] cursor-pointer whitespace-nowrap shrink-0"
+            >
+              📲 INSTALL APP
+            </button>
+          )}
         </div>
 
         {/* 4. Bottom Studio Logo Slot */}

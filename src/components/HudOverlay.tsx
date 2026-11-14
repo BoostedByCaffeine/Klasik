@@ -58,6 +58,9 @@ export interface HudSnapshot {
 interface TopHudBarProps {
   hud: HudSnapshot;
   dockCollapsed: boolean;
+  isStandalone?: boolean;
+  isFullscreen?: boolean;
+  onToggleFullscreen?: () => void;
   onToggleDock: () => void;
   onToggleBgm: () => void;
   onToggleMute: () => void;
@@ -78,6 +81,9 @@ interface TopHudBarProps {
 export const TopHudBar: React.FC<TopHudBarProps> = ({
   hud,
   dockCollapsed,
+  isStandalone = false,
+  isFullscreen = false,
+  onToggleFullscreen,
   onToggleDock,
   onToggleBgm,
   onToggleMute,
@@ -341,20 +347,42 @@ export const TopHudBar: React.FC<TopHudBarProps> = ({
           <span className="text-[9px]">📊 BIZ &amp; SHOP</span>
         </button>
 
-        {/* Offline PWA & Android APK Modal [📲 APP / APK] */}
-        <button
-          type="button"
-          tabIndex={-1}
-          data-testid="hud-pwa-btn"
-          aria-label="Open Offline PWA and Android APK Modal"
-          onClick={(e) => {
-            e.currentTarget.blur();
-            onOpenPwaModal();
-          }}
-          className="gba-btn px-1.5 h-6 flex items-center justify-center text-[#f87171] cursor-pointer whitespace-nowrap"
-        >
-          <span className="text-[9px]">📲 APP / APK</span>
-        </button>
+        {/* Offline PWA & Android APK Modal [📲 APP / APK] — Shown ONLY in Live Web Browser Mode (!isStandalone) */}
+        {!isStandalone && (
+          <button
+            type="button"
+            tabIndex={-1}
+            data-testid="hud-pwa-btn"
+            aria-label="Open Offline PWA and Android APK Modal"
+            onClick={(e) => {
+              e.currentTarget.blur();
+              onOpenPwaModal();
+            }}
+            className="gba-btn px-1.5 h-6 flex items-center justify-center text-[#f87171] cursor-pointer whitespace-nowrap"
+          >
+            <span className="text-[9px]">📲 APP / APK</span>
+          </button>
+        )}
+
+        {/* Mobile Web Fullscreen Toggle [⛶] — Shown ONLY in Live Web Browser Mode (!isStandalone) */}
+        {!isStandalone && onToggleFullscreen && (
+          <button
+            type="button"
+            tabIndex={-1}
+            data-testid="hud-fullscreen-btn"
+            aria-label={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen Landscape View'}
+            title={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
+            onClick={(e) => {
+              e.currentTarget.blur();
+              onToggleFullscreen();
+            }}
+            className={`gba-btn px-1.5 h-6 flex items-center justify-center cursor-pointer whitespace-nowrap ${
+              isFullscreen ? 'gba-btn-active' : 'text-[#fde047]'
+            }`}
+          >
+            <span className="text-[9px]">[⛶]</span>
+          </button>
+        )}
 
         {/* Room Map Switcher [V] */}
         <button

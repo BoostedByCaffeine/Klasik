@@ -359,6 +359,7 @@ export interface BusinessFinanceState {
   ingredientStock: number;
   wholesaleRestockCost: number; // $20 for +10 units ($2.00/cup vs $4.00 emergency)
   wholesalePackSize: number; // 10
+  autoRestock?: boolean;
   upgrades: Record<UpgradeId, boolean>;
 }
 
@@ -462,6 +463,7 @@ export interface CustomerPartyCompanion {
   isChild: boolean;
   offsetX: number;
   offsetY: number;
+  facing?: 'left' | 'right' | 'down' | 'up';
 }
 
 export interface CustomerPartyPet {
@@ -489,6 +491,9 @@ export interface CustomerEntity {
   finalTargetX?: number;
   finalTargetY?: number;
   seatIndex: number | null;
+  tableX?: number;
+  tableY?: number;
+  facing?: 'left' | 'right' | 'down' | 'up';
   sipTimer: number;
   sipBubbleTimer: number;
   carryingCup: boolean;
@@ -816,39 +821,145 @@ export const INITIAL_CATS: CatCompanion[] = [
   },
 ];
 
-// 3 Indoor Seating Lounge Tables (INSIDE map)
-export const INDOOR_TABLES = [
-  { x: 132, y: 358 },
-  { x: 244, y: 392 },
-  { x: 504, y: 368 },
+export interface ChairSlot {
+  x: number;
+  y: number;
+  facing: 'left' | 'right' | 'down' | 'up';
+}
+
+export interface TableWithChairs {
+  x: number;
+  y: number;
+  leftChair: ChairSlot;
+  rightChair: ChairSlot;
+  topChair: ChairSlot;
+  petMatSpot: { x: number; y: number };
+}
+
+export function createTableWithChairs(x: number, y: number): TableWithChairs {
+  return {
+    x,
+    y,
+    leftChair: { x: x - 32, y: y - 4, facing: 'right' },
+    rightChair: { x: x + 32, y: y - 4, facing: 'left' },
+    topChair: { x, y: y - 26, facing: 'down' },
+    petMatSpot: { x: x - 46, y: y + 12 },
+  };
+}
+
+// 3 Indoor Seating Lounge Tables (INSIDE map) with explicit chair slots
+export const INDOOR_TABLES: TableWithChairs[] = [
+  createTableWithChairs(132, 358),
+  createTableWithChairs(244, 392),
+  createTableWithChairs(504, 368),
 ];
 
 // 2 Garage Showroom Lounge Tables right next to the 1990 Miata MX-5 (INSIDE map)
-export const GARAGE_TABLES = [
-  { x: 648, y: 166 },
-  { x: 648, y: 332 },
+export const GARAGE_TABLES: TableWithChairs[] = [
+  createTableWithChairs(648, 166),
+  createTableWithChairs(648, 332),
 ];
 
-// 4 Outdoor Umbrella Lounge Tables (GARDEN map)
-export const GARDEN_TABLES = [
-  { x: 268, y: 214 },
-  { x: 632, y: 214 },
-  { x: 268, y: 352 },
-  { x: 632, y: 352 },
+// 4 Outdoor Umbrella Lounge Tables (GARDEN map) with explicit chair slots
+export const GARDEN_TABLES: TableWithChairs[] = [
+  createTableWithChairs(268, 214),
+  createTableWithChairs(632, 214),
+  createTableWithChairs(268, 352),
+  createTableWithChairs(632, 352),
 ];
 
-// All 8 Customer Dining Seats: First 4 are Indoor/Garage (idx 0..3), Next 4 are Garden Umbrella Tables (idx 4..7)
-// Coordinates sit on the walkable chair/bench perimeter just south of each table collider so seated guests never clip table tops
-export const ALL_CUSTOMER_SEATS: Array<{ idx: number; room: RoomId; x: number; y: number }> = [
-  { idx: 0, room: 'inside', x: INDOOR_TABLES[0].x, y: INDOOR_TABLES[0].y + 26 },
-  { idx: 1, room: 'inside', x: INDOOR_TABLES[1].x, y: INDOOR_TABLES[1].y + 24 },
-  { idx: 2, room: 'inside', x: INDOOR_TABLES[2].x, y: INDOOR_TABLES[2].y + 26 },
-  { idx: 3, room: 'inside', x: GARAGE_TABLES[1].x, y: GARAGE_TABLES[1].y + 26 },
-  { idx: 4, room: 'garden', x: GARDEN_TABLES[0].x, y: GARDEN_TABLES[0].y + 28 },
-  { idx: 5, room: 'garden', x: GARDEN_TABLES[1].x, y: GARDEN_TABLES[1].y + 28 },
-  { idx: 6, room: 'garden', x: GARDEN_TABLES[2].x, y: GARDEN_TABLES[2].y + 28 },
-  { idx: 7, room: 'garden', x: GARDEN_TABLES[3].x, y: GARDEN_TABLES[3].y + 28 },
+export interface CustomerSeatSlot {
+  idx: number;
+  room: RoomId;
+  x: number;
+  y: number;
+  tableX: number;
+  tableY: number;
+  leftChair: ChairSlot;
+  rightChair: ChairSlot;
+  topChair: ChairSlot;
+  petMatSpot: { x: number; y: number };
+}
+
+function createCustomerSeatSlot(idx: number, room: RoomId, table: TableWithChairs): CustomerSeatSlot {
+  return {
+    idx,
+    room,
+    x: table.leftChair.x,
+    y: table.leftChair.y,
+    tableX: table.x,
+    tableY: table.y,
+    leftChair: table.leftChair,
+    rightChair: table.rightChair,
+    topChair: table.topChair,
+    petMatSpot: table.petMatSpot,
+  };
+}
+
+// All 8 Customer Dining Tables: First 4 are Indoor/Garage (idx 0..3), Next 4 are Garden Umbrella Tables (idx 4..7)
+export const ALL_CUSTOMER_SEATS: CustomerSeatSlot[] = [
+  createCustomerSeatSlot(0, 'inside', INDOOR_TABLES[0]),
+  createCustomerSeatSlot(1, 'inside', INDOOR_TABLES[1]),
+  createCustomerSeatSlot(2, 'inside', INDOOR_TABLES[2]),
+  createCustomerSeatSlot(3, 'inside', GARAGE_TABLES[1]),
+  createCustomerSeatSlot(4, 'garden', GARDEN_TABLES[0]),
+  createCustomerSeatSlot(5, 'garden', GARDEN_TABLES[1]),
+  createCustomerSeatSlot(6, 'garden', GARDEN_TABLES[2]),
+  createCustomerSeatSlot(7, 'garden', GARDEN_TABLES[3]),
 ];
+
+export function getCustomerSeatSlot(seatIndex: number | null): CustomerSeatSlot | null {
+  if (seatIndex === null || seatIndex < 0 || seatIndex >= ALL_CUSTOMER_SEATS.length) {
+    return null;
+  }
+  return ALL_CUSTOMER_SEATS[seatIndex];
+}
+
+export interface PartySeatedPositions {
+  tableX: number;
+  tableY: number;
+  leader: ChairSlot;
+  companions: ChairSlot[];
+  petSpot: { x: number; y: number } | null;
+  cupPositions: Array<{ x: number; y: number }>;
+}
+
+/**
+ * Returns the exact chair coordinates, inward facing directions, pet mat spot,
+ * and tabletop coffee cup coordinates for a seated customer party.
+ */
+export function getPartySeatedPositions(cust: CustomerEntity): PartySeatedPositions | null {
+  const seat = getCustomerSeatSlot(cust.seatIndex);
+  if (!seat) return null;
+
+  const leader: ChairSlot = { ...seat.leftChair };
+  const companions: ChairSlot[] = [];
+  if (cust.companions.length >= 1) {
+    companions.push({ ...seat.rightChair });
+  }
+  if (cust.companions.length >= 2) {
+    companions.push({ ...seat.topChair });
+  }
+
+  const cupPositions: Array<{ x: number; y: number }> = [
+    { x: seat.tableX - 10, y: seat.tableY - 6 },
+  ];
+  if (cust.companions.length >= 1) {
+    cupPositions.push({ x: seat.tableX + 10, y: seat.tableY - 6 });
+  }
+  if (cust.companions.length >= 2) {
+    cupPositions.push({ x: seat.tableX, y: seat.tableY - 11 });
+  }
+
+  return {
+    tableX: seat.tableX,
+    tableY: seat.tableY,
+    leader,
+    companions,
+    petSpot: cust.pet ? { ...seat.petMatSpot } : null,
+    cupPositions,
+  };
+}
 
 // Active Front Counter Queue Slots (INSIDE map)
 export const COUNTER_QUEUE_SLOTS = [
@@ -909,13 +1020,13 @@ export const ROOM_COLLIDERS: AabbCollider[] = [
   { id: 'miata-mx5-collider', room: 'inside', x: 786, y: 228, w: 88, h: 148 },
   // Garage Tool Chest & Tire Rack along top wall
   { id: 'garage-top-racks', room: 'inside', x: 730, y: 56, w: 256, h: 40 },
-  // 3 Indoor Dining Table Tops
-  { id: 'indoor-table-0', room: 'inside', x: INDOOR_TABLES[0].x, y: INDOOR_TABLES[0].y - 4, w: 54, h: 24 },
-  { id: 'indoor-table-1', room: 'inside', x: INDOOR_TABLES[1].x, y: INDOOR_TABLES[1].y - 4, w: 54, h: 24 },
-  { id: 'indoor-table-2', room: 'inside', x: INDOOR_TABLES[2].x, y: INDOOR_TABLES[2].y - 4, w: 54, h: 24 },
+  // 3 Indoor Dining Table Tops (sized so leftChair/rightChair at x±32 and topChair at y-26 are outside collider)
+  { id: 'indoor-table-0', room: 'inside', x: INDOOR_TABLES[0].x, y: INDOOR_TABLES[0].y - 4, w: 38, h: 18 },
+  { id: 'indoor-table-1', room: 'inside', x: INDOOR_TABLES[1].x, y: INDOOR_TABLES[1].y - 4, w: 38, h: 18 },
+  { id: 'indoor-table-2', room: 'inside', x: INDOOR_TABLES[2].x, y: INDOOR_TABLES[2].y - 4, w: 38, h: 18 },
   // 2 Garage Lounge Table Tops
-  { id: 'garage-table-0', room: 'inside', x: GARAGE_TABLES[0].x, y: GARAGE_TABLES[0].y - 4, w: 48, h: 22 },
-  { id: 'garage-table-1', room: 'inside', x: GARAGE_TABLES[1].x, y: GARAGE_TABLES[1].y - 4, w: 48, h: 22 },
+  { id: 'garage-table-0', room: 'inside', x: GARAGE_TABLES[0].x, y: GARAGE_TABLES[0].y - 4, w: 38, h: 18 },
+  { id: 'garage-table-1', room: 'inside', x: GARAGE_TABLES[1].x, y: GARAGE_TABLES[1].y - 4, w: 38, h: 18 },
 
   // GARDEN ROOM COLLIDERS
   { id: 'garden-veranda-left', room: 'garden', x: 195, y: 58, w: 350, h: 72 },
@@ -926,10 +1037,10 @@ export const ROOM_COLLIDERS: AabbCollider[] = [
   // Center Watering Well / Stone Koi Fountain
   { id: 'garden-center-well', room: 'garden', x: 450, y: 254, w: 66, h: 44 },
   // 4 Garden Umbrella Table Tops
-  { id: 'garden-table-0', room: 'garden', x: GARDEN_TABLES[0].x, y: GARDEN_TABLES[0].y - 4, w: 54, h: 24 },
-  { id: 'garden-table-1', room: 'garden', x: GARDEN_TABLES[1].x, y: GARDEN_TABLES[1].y - 4, w: 54, h: 24 },
-  { id: 'garden-table-2', room: 'garden', x: GARDEN_TABLES[2].x, y: GARDEN_TABLES[2].y - 4, w: 54, h: 24 },
-  { id: 'garden-table-3', room: 'garden', x: GARDEN_TABLES[3].x, y: GARDEN_TABLES[3].y - 4, w: 54, h: 24 },
+  { id: 'garden-table-0', room: 'garden', x: GARDEN_TABLES[0].x, y: GARDEN_TABLES[0].y - 4, w: 38, h: 18 },
+  { id: 'garden-table-1', room: 'garden', x: GARDEN_TABLES[1].x, y: GARDEN_TABLES[1].y - 4, w: 38, h: 18 },
+  { id: 'garden-table-2', room: 'garden', x: GARDEN_TABLES[2].x, y: GARDEN_TABLES[2].y - 4, w: 38, h: 18 },
+  { id: 'garden-table-3', room: 'garden', x: GARDEN_TABLES[3].x, y: GARDEN_TABLES[3].y - 4, w: 38, h: 18 },
   // 6 Blooming Daisy Planter Beds
   { id: 'daisy-bed-nw', room: 'garden', x: 110, y: 176, w: 94, h: 50 },
   { id: 'daisy-bed-ne', room: 'garden', x: 790, y: 176, w: 94, h: 50 },
@@ -1218,6 +1329,7 @@ export function createCustomerParty(
       isChild: false,
       offsetX: 24,
       offsetY: 4,
+      facing: 'left',
     });
   } else if (partyKind === 'friends') {
     companions.push({
@@ -1226,16 +1338,16 @@ export function createCustomerParty(
       isChild: false,
       offsetX: -22,
       offsetY: 5,
+      facing: 'left',
     });
-    if (seq % 2 === 1) {
-      companions.push({
-        name: NPC_NAMES[(seq + 5) % NPC_NAMES.length],
-        spriteVariant: (seq + 2) % 4,
-        isChild: false,
-        offsetX: 22,
-        offsetY: 5,
-      });
-    }
+    companions.push({
+      name: NPC_NAMES[(seq + 5) % NPC_NAMES.length],
+      spriteVariant: (seq + 2) % 4,
+      isChild: false,
+      offsetX: 22,
+      offsetY: 5,
+      facing: 'down',
+    });
   } else if (partyKind === 'family') {
     companions.push({
       name: NPC_NAMES[(seq + 4) % NPC_NAMES.length],
@@ -1243,13 +1355,15 @@ export function createCustomerParty(
       isChild: false,
       offsetX: 24,
       offsetY: 2,
+      facing: 'left',
     });
     companions.push({
-      name: 'Pip',
+      name: 'Jr',
       spriteVariant: (seq + 3) % 4,
       isChild: true,
       offsetX: -20,
       offsetY: 8,
+      facing: 'down',
     });
   }
 
@@ -1287,6 +1401,7 @@ export function createCustomerParty(
     targetY: slot.y,
     waypoints: buildWaypoints(startX, startY, slot.x, slot.y, 'inside'),
     seatIndex: null,
+    facing: 'right',
     sipTimer: 0,
     sipBubbleTimer: 3.5,
     carryingCup: false,
@@ -1543,6 +1658,22 @@ export function restockWholesaleIngredients(state: CafeState): {
   state.lastMessage = `Purchased +${pack} Wholesale Ingredient Stock for $${cost} ($${getUnitCogs(state, false).toFixed(2)} COGS/cup)!`;
   saveCafeProgressV2(state);
   return { restocked: true, message: state.lastMessage };
+}
+
+export function toggleWholesaleAutoRestock(state: CafeState): boolean {
+  state.finance.autoRestock = !state.finance.autoRestock;
+  if (
+    state.finance.autoRestock &&
+    state.finance.ingredientStock === 0 &&
+    state.coins >= state.finance.wholesaleRestockCost
+  ) {
+    restockWholesaleIngredients(state);
+  }
+  state.lastMessage = state.finance.autoRestock
+    ? '📦 Wholesale Auto-Restock ON: Automatically buys +10 stock ($20) whenever stock hits 0!'
+    : '📦 Wholesale Auto-Restock OFF: Manual restocking only.';
+  saveCafeProgressV2(state);
+  return Boolean(state.finance.autoRestock);
 }
 
 export function purchaseCapitalUpgrade(
@@ -1941,6 +2072,7 @@ export function createInitialCafeState(
       ingredientStock: 12,
       wholesaleRestockCost: 20,
       wholesalePackSize: 10,
+      autoRestock: false,
       upgrades: {
         direct_trade_beans: false,
         dual_boiler: false,
@@ -1979,9 +2111,9 @@ export function createInitialCafeState(
     staff,
     popups: [],
     barista: {
-      x: 296,
+      x: 236,
       y: 192,
-      targetX: 296,
+      targetX: 236,
       targetY: 192,
       facing: 'down',
       walkDist: 0,
@@ -2241,19 +2373,36 @@ export function advanceCustomersSimulation(state: CafeState, dt: number): boolea
 
     if (moveRes.distMoved > 0) {
       c.walkDist += moveRes.distMoved;
+      if (Math.abs(moveRes.dx) >= Math.abs(moveRes.dy)) {
+        c.facing = moveRes.dx < 0 ? 'left' : 'right';
+      } else {
+        c.facing = moveRes.dy < 0 ? 'up' : 'down';
+      }
     }
 
-    // Update trailing Pet Companion (follows 18px behind party leader, sits beside table, hearts near Lilo/Champy)
+    const seatSlot = getCustomerSeatSlot(c.seatIndex);
+
+    // Update trailing Pet Companion (follows party leader, or sits at table's petMatSpot beside chairs)
     if (c.pet) {
-      const petTargetX = c.state === 'sipping' ? c.x - 22 : c.x - 18;
-      const petTargetY = c.state === 'sipping' ? c.y + 8 : c.y + 8;
+      const isSeatedAtTable =
+        c.state === 'sipping' &&
+        seatSlot !== null &&
+        c.room === seatSlot.room &&
+        Math.hypot(seatSlot.leftChair.x - c.x, seatSlot.leftChair.y - c.y) <= 12;
+
+      const petTargetX = isSeatedAtTable && seatSlot ? seatSlot.petMatSpot.x : c.x - 18;
+      const petTargetY = isSeatedAtTable && seatSlot ? seatSlot.petMatSpot.y : c.y + 8;
       const pdx = petTargetX - c.pet.x;
       const pdy = petTargetY - c.pet.y;
       const pdist = Math.hypot(pdx, pdy);
       if (pdist > 2) {
-        const pstep = Math.min(pdist, 115 * dt);
+        const pstep = Math.min(pdist, 120 * dt);
         moveEntityWithCollisions(c.pet, (pdx / pdist) * pstep, (pdy / pdist) * pstep, c.room, 6);
         c.pet.facing = pdx < 0 ? 'left' : 'right';
+      } else if (isSeatedAtTable && seatSlot) {
+        c.pet.x = seatSlot.petMatSpot.x;
+        c.pet.y = seatSlot.petMatSpot.y;
+        c.pet.facing = 'right';
       }
       if (c.pet.heartTimer > 0) {
         c.pet.heartTimer = Math.max(0, c.pet.heartTimer - dt);
@@ -2272,15 +2421,19 @@ export function advanceCustomersSimulation(state: CafeState, dt: number): boolea
     if (moveRes.reachedFinal || distToFinal <= 4) {
       if (c.state === 'walking_in') {
         c.state = 'waiting';
+        c.facing = 'up';
         hudChanged = true;
       } else if (c.state === 'walking_to_garden') {
         // Reached the South Doorway (`▼ TO GARDEN`) inside! Transition into the Backyard Garden via the North Veranda Doorway!
+        const gardenSeat = seatSlot ?? ALL_CUSTOMER_SEATS[4];
         c.room = 'garden';
         c.state = 'sipping';
         c.x = GARDEN_DOOR_MAT.x;
         c.y = GARDEN_DOOR_MAT.y + 24;
-        c.targetX = c.finalTargetX ?? ALL_CUSTOMER_SEATS[4].x;
-        c.targetY = c.finalTargetY ?? ALL_CUSTOMER_SEATS[4].y;
+        c.tableX = gardenSeat.tableX;
+        c.tableY = gardenSeat.tableY;
+        c.targetX = c.finalTargetX ?? gardenSeat.leftChair.x;
+        c.targetY = c.finalTargetY ?? gardenSeat.leftChair.y;
         c.waypoints = buildWaypoints(c.x, c.y, c.targetX, c.targetY, 'garden');
         if (c.pet) {
           c.pet.x = c.x - 18;
@@ -2290,6 +2443,26 @@ export function advanceCustomersSimulation(state: CafeState, dt: number): boolea
         spawnPopup(state, '🚪 -> GARDEN TABLE', INSIDE_DOOR_MAT.x, INSIDE_DOOR_MAT.y - 16, '#86efac', 'inside');
         hudChanged = true;
       } else if (c.state === 'sipping') {
+        // Snap party leader cleanly onto leftChair facing inward toward the table
+        if (seatSlot && c.room === seatSlot.room) {
+          c.x = seatSlot.leftChair.x;
+          c.y = seatSlot.leftChair.y;
+          c.facing = seatSlot.leftChair.facing;
+          c.tableX = seatSlot.tableX;
+          c.tableY = seatSlot.tableY;
+          if (c.companions[0]) {
+            c.companions[0].facing = seatSlot.rightChair.facing;
+          }
+          if (c.companions[1]) {
+            c.companions[1].facing = seatSlot.topChair.facing;
+          }
+          if (c.pet && Math.hypot(seatSlot.petMatSpot.x - c.pet.x, seatSlot.petMatSpot.y - c.pet.y) <= 18) {
+            c.pet.x = seatSlot.petMatSpot.x;
+            c.pet.y = seatSlot.petMatSpot.y;
+            c.pet.facing = 'right';
+          }
+        }
+
         c.sipTimer -= dt;
         c.sipBubbleTimer -= dt;
         if (c.sipBubbleTimer <= 0) {
@@ -2302,7 +2475,7 @@ export function advanceCustomersSimulation(state: CafeState, dt: number): boolea
           }
         }
         if (c.sipTimer <= 0) {
-          // Leave coins in the Tip Jar and walk out the exit doorway to despawn!
+          // Leave coins in the Tip Jar, release all chair reservations, and walk out the exit doorway to despawn!
           const tableTip = 2 + Math.min(3, c.partySize);
           state.coins = Number((state.coins + tableTip).toFixed(2));
           state.tipJarCoins += 2;
@@ -2310,6 +2483,9 @@ export function advanceCustomersSimulation(state: CafeState, dt: number): boolea
           c.state = 'walking_out';
           c.carryingCup = false;
           c.seatIndex = null;
+          c.tableX = undefined;
+          c.tableY = undefined;
+          c.facing = 'down';
           c.dialogueText = 'Thanks Klasik! ♥';
           c.targetX = c.room === 'inside' ? INSIDE_DOOR_MAT.x : GARDEN_DOOR_MAT.x;
           c.targetY = c.room === 'inside' ? 446 : 122;
@@ -2335,6 +2511,26 @@ export function advanceEnvironmentAndHydration(state: CafeState, dt: number): bo
       state.timeOfDay = syncedTime;
       hudChanged = true;
     }
+  }
+
+  // QoL: Tip Jar Proximity Auto-Collect whenever the player barista walks within 38px of the register/tip jar
+  if (
+    state.room === 'inside' &&
+    state.tipJarCoins > 0 &&
+    Math.hypot(state.barista.x - TIP_JAR_BOUNDS.x, state.barista.y - TIP_JAR_BOUNDS.y) <= 38
+  ) {
+    collectTipJar(state);
+    hudChanged = true;
+  }
+
+  // QoL: Wholesale Auto-Restock when stock hits 0 and coins >= 20
+  if (
+    state.finance.autoRestock &&
+    state.finance.ingredientStock === 0 &&
+    state.coins >= state.finance.wholesaleRestockCost
+  ) {
+    restockWholesaleIngredients(state);
+    hudChanged = true;
   }
 
   state.weatherCycleTimer -= dt;
@@ -2714,6 +2910,15 @@ export function serveWaitingCustomer(state: CafeState, fromAutoStaff = false): S
   const baseDrinkPrice = getDrinkSellingPrice(state, craftedDrink);
   const grossSale = baseDrinkPrice + cozyBonus;
 
+  // QoL: If Wholesale Auto-Restock is enabled and stock is 0 before serving, auto-restock +10 units for $20
+  if (
+    state.finance.autoRestock &&
+    state.finance.ingredientStock === 0 &&
+    state.coins >= state.finance.wholesaleRestockCost
+  ) {
+    restockWholesaleIngredients(state);
+  }
+
   let cogsIncurred = 0;
   let emergencyRestockUsed = false;
   if (state.finance.ingredientStock > 0) {
@@ -2745,6 +2950,15 @@ export function serveWaitingCustomer(state: CafeState, fromAutoStaff = false): S
   state.finance.grossRevenue = Number((state.finance.grossRevenue + totalGrossSale).toFixed(2));
   state.finance.totalCogs = Number((state.finance.totalCogs + cogsIncurred).toFixed(2));
   recalculateProfitMetrics(state.finance);
+
+  // QoL: If serving the drink just dropped ingredientStock to 0 and Auto-Restock is ON, immediately replenish +10 stock
+  if (
+    state.finance.autoRestock &&
+    state.finance.ingredientStock === 0 &&
+    state.coins >= state.finance.wholesaleRestockCost
+  ) {
+    restockWholesaleIngredients(state);
+  }
 
   const netProfitEarned = Number((totalGrossSale - cogsIncurred).toFixed(2));
   const heartsEarned = state.cozyRating >= 75 ? 2 : 1;
@@ -2795,14 +3009,17 @@ export function serveWaitingCustomer(state: CafeState, fromAutoStaff = false): S
   if (indoorFreeSeat) {
     waitingCustomer.state = 'sipping';
     waitingCustomer.seatIndex = indoorFreeSeat.idx;
+    waitingCustomer.tableX = indoorFreeSeat.tableX;
+    waitingCustomer.tableY = indoorFreeSeat.tableY;
+    waitingCustomer.facing = indoorFreeSeat.leftChair.facing;
     waitingCustomer.room = 'inside';
-    waitingCustomer.targetX = indoorFreeSeat.x;
-    waitingCustomer.targetY = indoorFreeSeat.y;
+    waitingCustomer.targetX = indoorFreeSeat.leftChair.x;
+    waitingCustomer.targetY = indoorFreeSeat.leftChair.y;
     waitingCustomer.waypoints = buildWaypoints(
       waitingCustomer.x,
       waitingCustomer.y,
-      indoorFreeSeat.x,
-      indoorFreeSeat.y,
+      indoorFreeSeat.leftChair.x,
+      indoorFreeSeat.leftChair.y,
       'inside'
     );
     waitingCustomer.dialogueText =
@@ -2812,6 +3029,8 @@ export function serveWaitingCustomer(state: CafeState, fromAutoStaff = false): S
     waitingCustomer.isTakeout = true;
     waitingCustomer.state = 'walking_out';
     waitingCustomer.seatIndex = null;
+    waitingCustomer.tableX = undefined;
+    waitingCustomer.tableY = undefined;
     waitingCustomer.room = 'inside';
     waitingCustomer.targetX = INSIDE_DOOR_MAT.x;
     waitingCustomer.targetY = 448;
@@ -2828,6 +3047,9 @@ export function serveWaitingCustomer(state: CafeState, fromAutoStaff = false): S
     routedToGarden = true;
     waitingCustomer.state = 'walking_to_garden';
     waitingCustomer.seatIndex = gardenFreeSeat.idx;
+    waitingCustomer.tableX = gardenFreeSeat.tableX;
+    waitingCustomer.tableY = gardenFreeSeat.tableY;
+    waitingCustomer.facing = gardenFreeSeat.leftChair.facing;
     waitingCustomer.room = 'inside';
     waitingCustomer.targetX = INSIDE_DOOR_MAT.x;
     waitingCustomer.targetY = INSIDE_DOOR_MAT.y;
@@ -2838,11 +3060,14 @@ export function serveWaitingCustomer(state: CafeState, fromAutoStaff = false): S
       INSIDE_DOOR_MAT.y,
       'inside'
     );
-    waitingCustomer.finalTargetX = gardenFreeSeat.x;
-    waitingCustomer.finalTargetY = gardenFreeSeat.y;
+    waitingCustomer.finalTargetX = gardenFreeSeat.leftChair.x;
+    waitingCustomer.finalTargetY = gardenFreeSeat.leftChair.y;
     waitingCustomer.dialogueText = 'Heading to Garden Patio! 🌼';
   } else {
     waitingCustomer.state = 'walking_out';
+    waitingCustomer.seatIndex = null;
+    waitingCustomer.tableX = undefined;
+    waitingCustomer.tableY = undefined;
     waitingCustomer.targetX = INSIDE_DOOR_MAT.x;
     waitingCustomer.targetY = 448;
     waitingCustomer.waypoints = buildWaypoints(

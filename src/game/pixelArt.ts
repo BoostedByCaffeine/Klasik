@@ -23,6 +23,8 @@ import {
   StationConfig,
   getFrontWaitingCustomer,
   getRecommendedStation,
+  getCustomerSeatSlot,
+  getPartySeatedPositions,
 } from './rules';
 
 export const WORLD_WIDTH = 900;
@@ -1349,20 +1351,191 @@ function drawCustomerPet(
   }
 }
 
-function drawCustomer(
+/**
+ * Draws a served coffee cup with saucer directly on top of a table surface,
+ * plus subtle rising pixel steam wisps for Cozy Aura feedback.
+ */
+function drawTabletopCupWithSaucer(
+  ctx: CanvasRenderingContext2D,
+  cupX: number,
+  cupY: number,
+  cupColor: string,
+  accentColor: string,
+  time: number,
+  seed = 0
+) {
+  const x = px(cupX);
+  const y = px(cupY);
+
+  // Porcelain saucer on tabletop
+  ctx.fillStyle = '#090b0e';
+  ctx.fillRect(x - 6, y + 2, 12, 3);
+  ctx.fillStyle = '#e2e8f0';
+  ctx.fillRect(x - 5, y + 2, 10, 2);
+
+  // Coffee cup with crema/accent rim
+  drawPixelBox(ctx, x - 4, y - 6, 8, 9, cupColor, '#090b0e', accentColor);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(x - 3, y - 5, 6, 2);
+
+  // Rising pixel steam wisps above cup
+  const steamPhase = (time * 2.2 + seed) % 2.4;
+  if (steamPhase < 1.8) {
+    const lift = Math.round(steamPhase * 6);
+    const sway = Math.round(Math.sin(time * 4 + seed) * 1.5);
+    ctx.fillStyle = 'rgba(248, 250, 252, 0.78)';
+    ctx.fillRect(x - 1 + sway, y - 9 - lift, 2, 3);
+    ctx.fillRect(x + 1 - sway, y - 13 - lift, 2, 2);
+  }
+}
+
+/**
+ * Draws a single companion sprite (used by Y-sorted actor list)
+ */
+function drawCustomerCompanionActor(
+  ctx: CanvasRenderingContext2D,
+  cust: CustomerEntity,
+  compIndex: number,
+  compX: number,
+  compY: number,
+  compFacing: 'left' | 'right' | 'down' | 'up',
+  isSeatedAtTable: boolean,
+  time: number
+) {
+  const comp = cust.companions[compIndex];
+  if (!comp) return;
+
+  const outfits = [
+    { H: '#7c2d12', h: '#9a3412', B: '#f43f5e', T: '#f8fafc', A: '#1e293b' },
+    { H: '#0f172a', h: '#334155', B: '#38bdf8', T: '#e2e8f0', A: '#0284c7' },
+    { H: '#713f12', h: '#a16207', B: '#a855f7', T: '#f8fafc', A: '#4c1d95' },
+    { H: '#14532d', h: '#166534', B: '#facc15', T: '#f8fafc', A: '#065f46' },
+  ];
+  const compPal = outfits[comp.spriteVariant % outfits.length];
+  const recipe = RECIPES[cust.order];
+  const isMoving =
+    !isSeatedAtTable &&
+    (cust.state === 'walking_in' ||
+      cust.state === 'walking_to_garden' ||
+      cust.state === 'walking_out' ||
+      Math.hypot(cust.targetX - cust.x, cust.targetY - cust.y) > 2);
+  const frameIdx = isMoving ? Math.floor(cust.walkDist / 12) % 2 : 0;
+
+  // Seated pose: slightly tucked into chair (y - 2)
+  const renderX = px(compX);
+  const renderY = px(isSeatedAtTable ? compY - 2 : compY);
+
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.34)';
+  ctx.fillRect(renderX - 11, renderY + 12, 22, 5);
+
+  if (comp.isChild) {
+    // Compact Chibi Child Sprite ('Jr') for Family Parties on topChair
+    drawPixelBox(ctx, renderX - 7, renderY - 4, 14, 14, compPal.A, '#090b0e', compPal.T);
+    drawPixelBox(ctx, renderX - 8, renderY - 15, 16, 12, '#ffedd5', '#090b0e', compPal.H);
+    ctx.fillStyle = compPal.H;
+    ctx.fillRect(renderX - 8, renderY - 16, 16, 5);
+    ctx.fillStyle = '#090b0e';
+    ctx.fillRect(renderX - 4, renderY - 10, 2, 2);
+    ctx.fillRect(renderX + 2, renderY - 10, 2, 2);
+  } else {
+    drawSpriteMatrix(
+      ctx,
+      frameIdx === 0 ? CHIBI_CHAR_FRAME_0 : CHIBI_CHAR_FRAME_1,
+      {
+        O: '#090b0e',
+        H: compPal.H,
+        h: compPal.h,
+        n: compPal.H,
+        B: compPal.B,
+        S: '#ffedd5',
+        E: '#090b0e',
+        C: '#fb7185',
+        T: compPal.T,
+        A: compPal.A,
+        W: '#f8fafc',
+        P: '#1e293b',
+        F: '#090b0e',
+      },
+      renderX,
+      renderY - 2,
+      2,
+      compFacing === 'left'
+    );
+  }
+
+  // Only carry cup in hand while walking; when seated at table, cups rest on the tabletop!
+  if (!isSeatedAtTable && (cust.carryingCup || cust.state === 'walking_to_garden')) {
+    drawHandLevelProp(ctx, renderX, renderY, 'cup', recipe.color, recipe.accentColor);
+  }
+}
+
+/**
+ * Draws the seated tabletop cups and Cozy Aura steam/hearts for an occupied table
+ */
+function drawOccupiedTableSurfaceAndAura(
+  ctx: CanvasRenderingContext2D,
+  cust: CustomerEntity,
+  time: number
+) {
+  const seatedPos = getPartySeatedPositions(cust);
+  if (!seatedPos) return;
+  const recipe = RECIPES[cust.order];
+
+  // Render served coffee cups/saucers directly on top of the table surface (table.x - 10, table.x + 10, table.y - 6)
+  seatedPos.cupPositions.forEach((cup, idx) => {
+    drawTabletopCupWithSaucer(
+      ctx,
+      cup.x,
+      cup.y,
+      recipe.color,
+      recipe.accentColor,
+      time,
+      idx * 1.3 + (cust.seatIndex ?? 0)
+    );
+  });
+
+  // Cozy Aura Feedback: rising pixel hearts & cozy rating shimmer above occupied table every few seconds
+  const tx = px(seatedPos.tableX);
+  const ty = px(seatedPos.tableY);
+  const heartBob = Math.sin(time * 4.5 + tx * 0.1) * 3;
+  drawPixelHeart(ctx, tx, ty - 34 + heartBob, 2, '#f43f5e');
+
+  const auraCycle = (time + (cust.seatIndex ?? 0) * 1.7) % 4.0;
+  if (auraCycle < 2.2) {
+    const floatY = Math.round(auraCycle * 5);
+    drawPixelHeart(ctx, tx - 14, ty - 28 - floatY, 1, '#fb7185');
+    drawPixelHeart(ctx, tx + 14, ty - 30 - floatY, 1, '#fde047');
+  }
+
+  // Periodic cozy chat bubble centered above the occupied table
+  if (Math.floor(time + (cust.seatIndex ?? 0) * 2) % 4 !== 0) {
+    drawPixelBox(ctx, tx - 58, ty - 25, 116, 13, '#f8fafc', '#090b0e');
+    ctx.font = 'bold 5px "Press Start 2P", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#0f172a';
+    ctx.fillText(cust.dialogueText.slice(0, 20).toUpperCase(), tx, ty - 16);
+  }
+}
+
+function drawCustomerLeader(
   ctx: CanvasRenderingContext2D,
   cust: CustomerEntity,
   state: CafeState,
+  isSeatedAtTable: boolean,
   time: number
 ) {
-  const cx = px(cust.x);
-  const cy = px(cust.y);
+  const seatSlot = getCustomerSeatSlot(cust.seatIndex);
+  const rawX = isSeatedAtTable && seatSlot ? seatSlot.leftChair.x : cust.x;
+  const rawY = isSeatedAtTable && seatSlot ? seatSlot.leftChair.y - 2 : cust.y;
+  const cx = px(rawX);
+  const cy = px(rawY);
   const isMoving =
-    cust.state === 'walking_in' ||
-    cust.state === 'walking_to_garden' ||
-    cust.state === 'walking_out' ||
-    Math.hypot(cust.targetX - cust.x, cust.targetY - cust.y) > 2;
-  const frameIdx = isMoving ? Math.floor(cust.walkDist / 12) % 2 : Math.floor(time * 2) % 2;
+    !isSeatedAtTable &&
+    (cust.state === 'walking_in' ||
+      cust.state === 'walking_to_garden' ||
+      cust.state === 'walking_out' ||
+      Math.hypot(cust.targetX - cust.x, cust.targetY - cust.y) > 2);
+  const frameIdx = isMoving ? Math.floor(cust.walkDist / 12) % 2 : 0;
 
   const outfits = [
     { H: '#7c2d12', h: '#9a3412', B: '#f43f5e', T: '#f8fafc', A: '#1e293b' },
@@ -1372,66 +1545,7 @@ function drawCustomer(
   ];
   const pal = outfits[cust.spriteVariant % outfits.length];
   const recipe = RECIPES[cust.order];
-
-  // 1. Draw Accompanying Pet Companion (if present)
-  if (cust.pet) {
-    drawCustomerPet(ctx, cust, time);
-  }
-
-  // 2. Draw Party Companions (Couple Partner, Friends, or Family Child)
-  if (cust.companions && cust.companions.length > 0) {
-    cust.companions.forEach((comp, cIdx) => {
-      const compPal = outfits[comp.spriteVariant % outfits.length];
-      // When seated at a table (`sipping`), place the primary companion across the table (`+52px` on X)
-      let compX = px(cust.x + comp.offsetX);
-      let compY = px(cust.y + comp.offsetY);
-      if (cust.state === 'sipping') {
-        compX = cIdx === 0 ? px(cust.x + 52) : px(cust.x + 26);
-        compY = cIdx === 0 ? px(cust.y) : px(cust.y + 18);
-      }
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.34)';
-      ctx.fillRect(compX - 11, compY + 12, 22, 5);
-
-      if (comp.isChild) {
-        // Compact Chibi Child Sprite for Family Parties
-        drawPixelBox(ctx, compX - 7, compY - 4, 14, 14, compPal.A, '#090b0e', compPal.T);
-        drawPixelBox(ctx, compX - 8, compY - 15, 16, 12, '#ffedd5', '#090b0e', compPal.H);
-        ctx.fillStyle = compPal.H;
-        ctx.fillRect(compX - 8, compY - 16, 16, 5);
-        ctx.fillStyle = '#090b0e';
-        ctx.fillRect(compX - 4, compY - 10, 2, 2);
-        ctx.fillRect(compX + 2, compY - 10, 2, 2);
-      } else {
-        drawSpriteMatrix(
-          ctx,
-          frameIdx === 0 ? CHIBI_CHAR_FRAME_0 : CHIBI_CHAR_FRAME_1,
-          {
-            O: '#090b0e',
-            H: compPal.H,
-            h: compPal.h,
-            n: compPal.H,
-            B: compPal.B,
-            S: '#ffedd5',
-            E: '#090b0e',
-            C: '#fb7185',
-            T: compPal.T,
-            A: compPal.A,
-            W: '#f8fafc',
-            P: '#1e293b',
-            F: '#090b0e',
-          },
-          compX,
-          compY - 2,
-          2,
-          cust.state === 'sipping' && cIdx === 0
-        );
-      }
-
-      if (cust.carryingCup || cust.state === 'sipping' || cust.state === 'walking_to_garden') {
-        drawHandLevelProp(ctx, compX, compY, 'cup', recipe.color, recipe.accentColor);
-      }
-    });
-  }
+  const facingLeft = isSeatedAtTable ? false : cust.facing === 'left';
 
   ctx.fillStyle = 'rgba(0, 0, 0, 0.38)';
   ctx.fillRect(cx - 14, cy + 14, 28, 6);
@@ -1456,13 +1570,13 @@ function drawCustomer(
     },
     cx,
     cy - 2,
-    2
+    2,
+    facingLeft
   );
 
-  // ★ HAND-LEVEL PROP RENDERING (`cx + 10, cy + 3`) when customer carries or sips their drink! ★
-  if (cust.carryingCup || cust.state === 'sipping' || cust.state === 'walking_to_garden') {
-    const sipLift = cust.state === 'sipping' && Math.floor(time * 1.5) % 3 === 0 ? -2 : 0;
-    drawHandLevelProp(ctx, cx, cy + sipLift, 'cup', recipe.color, recipe.accentColor);
+  // Hand-level cup ONLY when walking; when seated at a table, drinks sit on top of the table surface!
+  if (!isSeatedAtTable && (cust.carryingCup || cust.state === 'walking_to_garden')) {
+    drawHandLevelProp(ctx, cx, cy, 'cup', recipe.color, recipe.accentColor);
   }
 
   const partyBadge =
@@ -1480,13 +1594,15 @@ function drawCustomer(
   if (cust.state === 'waiting') {
     const frontWaiting = getFrontWaitingCustomer(state);
     const isFrontCustomer = frontWaiting?.id === cust.id;
+    const waitElapsed = Math.max(0, state.elapsedSeconds - cust.arrivalTime);
+    const patiencePct = Math.max(0.25, Math.min(1, 1 - (waitElapsed % 45) / 60));
 
     if (isFrontCustomer) {
       const drinkReady = state.prep.currentStepIndex === 3 && state.prep.activeDrink !== null;
       const bw = 186;
-      const bh = 44;
+      const bh = 48;
       const bx = px(cx - bw - 22);
-      const by = px(cy - 34);
+      const by = px(cy - 38);
 
       drawPixelBox(
         ctx,
@@ -1507,7 +1623,7 @@ function drawCustomer(
       ctx.textAlign = 'left';
       ctx.font = 'bold 7px "Press Start 2P", monospace';
       ctx.fillStyle = '#090b0e';
-      ctx.fillText(recipe.shortName.toUpperCase(), bx + 32, by + 19);
+      ctx.fillText(recipe.shortName.toUpperCase(), bx + 32, by + 18);
 
       ctx.font = 'bold 14px "VT323", monospace';
       ctx.fillStyle = drinkReady ? '#047857' : '#334155';
@@ -1516,8 +1632,14 @@ function drawCustomer(
           ? '★ TAP OR [ENTER] TO SERVE!'
           : recipe.stepLabels[state.prep.currentStepIndex] ?? 'Tap to Brew!',
         bx + 32,
-        by + 35
+        by + 33
       );
+
+      // Customer Queue Patience bar
+      const pBarW = bw - 44;
+      drawPixelBox(ctx, bx + 32, by + 38, pBarW, 4, '#090b0e', '#475569');
+      ctx.fillStyle = patiencePct > 0.6 ? '#22c55e' : patiencePct > 0.35 ? '#facc15' : '#fb7185';
+      ctx.fillRect(bx + 33, by + 39, Math.round((pBarW - 2) * patiencePct), 2);
 
       const arrowBob = Math.floor(time * 5) % 2 === 0 ? 0 : 3;
       const ax = bx + bw - 14;
@@ -1531,7 +1653,9 @@ function drawCustomer(
       ctx.font = 'bold 6px "Press Start 2P", monospace';
       ctx.textAlign = 'left';
       ctx.fillStyle = '#0f172a';
-      ctx.fillText(`#2: ${recipe.shortName.toUpperCase()}`, cx + 26, cy - 7);
+      ctx.fillText(`#2: ${recipe.shortName.toUpperCase()}`, cx + 26, cy - 9);
+      ctx.fillStyle = '#22c55e';
+      ctx.fillRect(cx + 26, cy - 4, Math.round(96 * patiencePct), 2);
     }
   } else if (cust.state === 'walking_to_garden') {
     drawPixelBox(ctx, cx - 56, cy - 34, 112, 14, '#14532d', '#facc15');
@@ -1545,19 +1669,6 @@ function drawCustomer(
     ctx.textAlign = 'center';
     ctx.fillStyle = '#fef08a';
     ctx.fillText('TAKEOUT! ☔', cx, cy - 24);
-  } else if (cust.state === 'sipping') {
-    const heartBob = Math.sin(time * 5 + cust.x) * 3;
-    const midX = cust.companions && cust.companions.length > 0 ? cx + 26 : cx;
-    drawPixelHeart(ctx, midX, cy - 36 + heartBob, 2, '#f43f5e');
-
-    // Periodic cozy chat bubble while dining for 20-30s!
-    if (Math.floor(time + (cust.seatIndex ?? 0) * 2) % 4 !== 0) {
-      drawPixelBox(ctx, midX - 58, cy - 26, 116, 13, '#f8fafc', '#090b0e');
-      ctx.font = 'bold 5px "Press Start 2P", monospace';
-      ctx.textAlign = 'center';
-      ctx.fillStyle = '#0f172a';
-      ctx.fillText(cust.dialogueText.slice(0, 20).toUpperCase(), midX, cy - 17);
-    }
   }
 }
 
@@ -1751,8 +1862,26 @@ function renderInsideRoom(
   ctx.fillStyle = '#e2e8f0';
   ctx.fillText('PASTRIES', 200, 255);
 
-  // ★ CLICKABLE COUNTER TIP JAR (`TIP_JAR_BOUNDS` at x = 288, y = 228) ★
+  // ★ CLICKABLE COUNTER TIP JAR (`TIP_JAR_BOUNDS` at x = 288, y = 228) with Soft Pulse when tipJarCoins >= 10 ★
   const tj = TIP_JAR_BOUNDS;
+  const tipPulse = state.tipJarCoins >= 10;
+  if (tipPulse) {
+    drawWarmLightPool(
+      ctx,
+      tj.x,
+      tj.y,
+      36,
+      0.24 + 0.14 * Math.sin(time * 6),
+      '250, 204, 21'
+    );
+  }
+  const jarOutline = tipPulse
+    ? Math.floor(time * 5) % 2 === 0
+      ? '#fef08a'
+      : '#facc15'
+    : state.tipJarCoins > 0
+      ? '#facc15'
+      : '#090b0e';
   drawPixelBox(
     ctx,
     tj.x - 14,
@@ -1760,20 +1889,25 @@ function renderInsideRoom(
     28,
     28,
     '#bae6fd',
-    state.tipJarCoins > 0 ? '#facc15' : '#090b0e',
+    jarOutline,
     '#ffffff'
   );
   if (state.tipJarCoins > 0) {
     ctx.fillStyle = '#facc15';
-    ctx.fillRect(tj.x - 10, tj.y + 2, 20, 10);
+    ctx.fillRect(tj.x - 10, tj.y + 2, 20, Math.min(18, 6 + Math.floor(state.tipJarCoins / 2)));
+    const bob = tipPulse ? Math.round(Math.sin(time * 6) * 2) : 0;
     ctx.font = 'bold 6px "Press Start 2P", monospace';
     ctx.textAlign = 'center';
-    ctx.fillStyle = '#fde047';
-    ctx.fillText(`+${state.tipJarCoins}c`, tj.x, tj.y - 18);
+    ctx.fillStyle = tipPulse ? '#fef08a' : '#fde047';
+    ctx.fillText(
+      tipPulse ? `★ +${state.tipJarCoins}c` : `+${state.tipJarCoins}c`,
+      tj.x,
+      tj.y - 18 + bob
+    );
   }
   ctx.font = 'bold 5px "Press Start 2P", monospace';
   ctx.textAlign = 'center';
-  ctx.fillStyle = '#facc15';
+  ctx.fillStyle = tipPulse ? '#fef08a' : '#facc15';
   ctx.fillText('TIPS', tj.x, tj.y + 23);
 
   const recommendedStation =
@@ -1789,16 +1923,22 @@ function renderInsideRoom(
     );
   });
 
-  // 7. 3 Cozy Indoor Seating Lounge Tables with Wood-Grain Highlights
+  // 7. 3 Cozy Indoor Seating Lounge Tables with Left, Right, Top Chairs & Pet Mat
   INDOOR_TABLES.forEach((t) => {
     ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
     ctx.fillRect(t.x - 36, t.y + 8, 72, 16);
-    drawPixelBox(ctx, t.x - 40, t.y - 8, 16, 18, '#334155', '#090b0e', '#64748b');
-    drawPixelBox(ctx, t.x + 24, t.y - 8, 16, 18, '#334155', '#090b0e', '#64748b');
-    drawPixelBox(ctx, t.x - 24, t.y - 18, 48, 28, '#f8fafc', '#090b0e', '#ffffff');
+    // Pet Mat beside the chairs (`petMatSpot`: table.x - 46, table.y + 12)
+    drawPixelBox(ctx, t.petMatSpot.x - 10, t.petMatSpot.y - 5, 20, 12, '#334155', '#090b0e', '#64748b');
+    // Top Chair (`topChair`: table.x, table.y - 26)
+    drawPixelBox(ctx, t.topChair.x - 8, t.topChair.y - 6, 16, 14, '#334155', '#090b0e', '#64748b');
+    // Left Chair (`leftChair`: table.x - 32, table.y - 4) & Right Chair (`rightChair`: table.x + 32, table.y - 4)
+    drawPixelBox(ctx, t.leftChair.x - 8, t.leftChair.y - 6, 16, 18, '#334155', '#090b0e', '#64748b');
+    drawPixelBox(ctx, t.rightChair.x - 8, t.rightChair.y - 6, 16, 18, '#334155', '#090b0e', '#64748b');
+    // Table Surface
+    drawPixelBox(ctx, t.x - 22, t.y - 18, 44, 28, '#f8fafc', '#090b0e', '#ffffff');
     ctx.fillStyle = '#cbd5e1';
-    ctx.fillRect(t.x - 18, t.y - 6, 36, 2);
-    drawPixelBox(ctx, t.x - 5, t.y - 14, 10, 10, '#facc15', '#090b0e', '#fef08a');
+    ctx.fillRect(t.x - 16, t.y - 6, 32, 2);
+    drawPixelBox(ctx, t.x - 4, t.y - 14, 8, 8, '#facc15', '#090b0e', '#fef08a');
   });
 
   // 8. South Doorway Mat leading to the Backyard Daisy Garden (`INSIDE_DOOR_MAT`)
@@ -1874,13 +2014,15 @@ function renderInsideRoom(
   ctx.fillStyle = '#f8fafc';
   ctx.fillText('MX-5 ★', bayLeft + 237, bayTop + 42);
 
-  // ★ 1 GARAGE LOUNGE TABLE RIGHT NEXT TO THE MIATA (`GARAGE_TABLES`) ★
+  // ★ GARAGE LOUNGE TABLES RIGHT NEXT TO THE MIATA (`GARAGE_TABLES`) with Left, Right, Top Stools & Pet Mat ★
   GARAGE_TABLES.forEach((gt) => {
     ctx.fillStyle = 'rgba(0, 0, 0, 0.38)';
     ctx.fillRect(gt.x - 34, gt.y + 8, 68, 14);
-    drawPixelBox(ctx, gt.x - 38, gt.y - 8, 14, 16, '#334155', '#090b0e', '#64748b');
-    drawPixelBox(ctx, gt.x + 24, gt.y - 8, 14, 16, '#334155', '#090b0e', '#64748b');
-    drawPixelBox(ctx, gt.x - 22, gt.y - 16, 44, 24, '#0f172a', '#f8fafc', '#475569');
+    drawPixelBox(ctx, gt.petMatSpot.x - 10, gt.petMatSpot.y - 5, 20, 12, '#334155', '#090b0e', '#64748b');
+    drawPixelBox(ctx, gt.topChair.x - 7, gt.topChair.y - 6, 14, 13, '#334155', '#090b0e', '#64748b');
+    drawPixelBox(ctx, gt.leftChair.x - 7, gt.leftChair.y - 6, 14, 16, '#334155', '#090b0e', '#64748b');
+    drawPixelBox(ctx, gt.rightChair.x - 7, gt.rightChair.y - 6, 14, 16, '#334155', '#090b0e', '#64748b');
+    drawPixelBox(ctx, gt.x - 20, gt.y - 16, 40, 24, '#0f172a', '#f8fafc', '#475569');
     drawPixelBox(ctx, gt.x - 4, gt.y - 12, 8, 8, '#ef4444', '#090b0e', '#fca5a5');
   });
 
@@ -2205,13 +2347,19 @@ function renderGardenRoom(
   GARDEN_TABLES.forEach((t, idx) => {
     ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
     ctx.fillRect(t.x - 40, t.y + 8, 80, 18);
-    drawPixelBox(ctx, t.x - 42, t.y - 8, 16, 18, '#334155', '#090b0e', '#64748b');
-    drawPixelBox(ctx, t.x + 26, t.y - 8, 16, 18, '#334155', '#090b0e', '#64748b');
-    drawPixelBox(ctx, t.x - 26, t.y - 18, 52, 30, '#f8fafc', '#090b0e', '#ffffff');
+    // Pet Mat beside the chairs (`petMatSpot`: table.x - 46, table.y + 12)
+    drawPixelBox(ctx, t.petMatSpot.x - 10, t.petMatSpot.y - 5, 20, 12, '#334155', '#090b0e', '#64748b');
+    // Top Chair (`topChair`: table.x, table.y - 26)
+    drawPixelBox(ctx, t.topChair.x - 8, t.topChair.y - 6, 16, 14, '#334155', '#090b0e', '#64748b');
+    // Left Chair (`leftChair`: table.x - 32, table.y - 4) & Right Chair (`rightChair`: table.x + 32, table.y - 4)
+    drawPixelBox(ctx, t.leftChair.x - 8, t.leftChair.y - 6, 16, 18, '#334155', '#090b0e', '#64748b');
+    drawPixelBox(ctx, t.rightChair.x - 8, t.rightChair.y - 6, 16, 18, '#334155', '#090b0e', '#64748b');
+    // Table Surface
+    drawPixelBox(ctx, t.x - 22, t.y - 18, 44, 30, '#f8fafc', '#090b0e', '#ffffff');
     drawPixelBox(
       ctx,
       t.x - 28,
-      t.y - 36,
+      t.y - 38,
       56,
       14,
       idx % 2 === 0 ? '#0f172a' : '#1e293b',
@@ -2219,7 +2367,7 @@ function renderGardenRoom(
       '#facc15'
     );
     ctx.fillStyle = '#090b0e';
-    ctx.fillRect(t.x - 2, t.y - 22, 4, 10);
+    ctx.fillRect(t.x - 2, t.y - 24, 4, 10);
     drawSingleDaisy(ctx, t.x, t.y - 8, Math.sin(time * 2 + idx) * 1, true);
   });
 
@@ -2351,6 +2499,8 @@ export function renderCafeWorld(
     drawPhotoSquad(ctx, state);
   }
 
+  // QoL: Y-Sorted Entity Depth Rendering — sort barista, hired staff, cats, customer leaders,
+  // seated/walking companions, pets, and tabletop cups by their exact world Y coordinate each frame!
   const actors: Array<{ y: number; draw: () => void }> = [
     {
       y: state.barista.y,
@@ -2368,13 +2518,67 @@ export function renderCafeWorld(
         y: cat.y,
         draw: () => drawCatCompanion(ctx, cat, time),
       })),
-    ...state.customers
-      .filter((c) => c.room === state.room)
-      .map((c) => ({
-        y: c.y,
-        draw: () => drawCustomer(ctx, c, state, time),
-      })),
   ];
+
+  state.customers
+    .filter((c) => c.room === state.room)
+    .forEach((c) => {
+      const seatSlot = getCustomerSeatSlot(c.seatIndex);
+      const isSeatedAtTable =
+        c.state === 'sipping' &&
+        seatSlot !== null &&
+        c.room === seatSlot.room &&
+        Math.hypot(seatSlot.leftChair.x - c.x, seatSlot.leftChair.y - c.y) <= 12;
+
+      const seatedPos = isSeatedAtTable ? getPartySeatedPositions(c) : null;
+
+      // 1. Accompanying Pet (at petMatSpot when seated, or trailing behind leader)
+      if (c.pet) {
+        const petY = c.pet.y;
+        actors.push({
+          y: petY,
+          draw: () => drawCustomerPet(ctx, c, time),
+        });
+      }
+
+      // 2. Party Companions (rightChair for Companion 0, topChair for Companion 1 / Child Jr)
+      c.companions.forEach((comp, cIdx) => {
+        const compChair = seatedPos?.companions[cIdx];
+        const compX = compChair ? compChair.x : c.x + comp.offsetX;
+        const compY = compChair ? compChair.y : c.y + comp.offsetY;
+        const compFacing = compChair ? compChair.facing : c.facing ?? 'right';
+        actors.push({
+          y: compY,
+          draw: () =>
+            drawCustomerCompanionActor(
+              ctx,
+              c,
+              cIdx,
+              compX,
+              compY,
+              compFacing,
+              isSeatedAtTable,
+              time
+            ),
+        });
+      });
+
+      // 3. Party Leader (leftChair when seated)
+      const leaderY = seatedPos ? seatedPos.leader.y : c.y;
+      actors.push({
+        y: leaderY,
+        draw: () => drawCustomerLeader(ctx, c, state, isSeatedAtTable, time),
+      });
+
+      // 4. Occupied Table Surface Drinks & Cozy Aura Steam/Hearts (rendered above tabletop & topChair)
+      if (isSeatedAtTable && seatedPos) {
+        actors.push({
+          y: seatedPos.tableY + 1,
+          draw: () => drawOccupiedTableSurfaceAndAura(ctx, c, time),
+        });
+      }
+    });
+
   actors.sort((a, b) => a.y - b.y);
   actors.forEach((a) => a.draw());
 

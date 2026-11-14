@@ -39,6 +39,7 @@ import {
   advanceCustomersSimulation,
   updateBaristaAppearance,
   restockWholesaleIngredients,
+  toggleWholesaleAutoRestock,
   purchaseCapitalUpgrade,
   upgradeStationEquipment,
   purchaseOrToggleDecor,
@@ -71,7 +72,11 @@ import { CustomizeModal } from './components/CustomizeModal';
 import { BizUpgradesModal } from './components/BizUpgradesModal';
 import { RecipeMenuModal } from './components/RecipeMenuModal';
 import { PwaApkModal } from './components/PwaApkModal';
-import { initKlasikPwa, BeforeInstallPromptEvent } from './pwa/pwaManager';
+import {
+  initKlasikPwa,
+  BeforeInstallPromptEvent,
+  isStandaloneApp,
+} from './pwa/pwaManager';
 
 function makeHudSnapshot(state: CafeState): HudSnapshot {
   const waitingCustomer = state.customers.find((c) => c.state === 'waiting') ?? null;
@@ -160,8 +165,10 @@ export default function App() {
   const [showMenuModal, setShowMenuModal] = useState(false);
   const [showPwaModal, setShowPwaModal] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
-  const [isPwaInstalled, setIsPwaInstalled] = useState<boolean>(false);
+  const [isStandalone, setIsStandalone] = useState<boolean>(() => isStandaloneApp());
+  const [isPwaInstalled, setIsPwaInstalled] = useState<boolean>(() => isStandaloneApp());
   const [swRegistered, setSwRegistered] = useState<boolean>(false);
+  const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
 
   const updateHudIfChanged = useCallback((st: CafeState) => {
     const next = makeHudSnapshot(st);
@@ -190,9 +197,15 @@ export default function App() {
       setSwRegistered(res.swRegistered);
     });
 
-    if (typeof window !== 'undefined' && window.matchMedia('(display-mode: standalone)').matches) {
-      setIsPwaInstalled(true);
-    }
+    const syncStandaloneStatus = () => {
+      const standaloneNow = isStandaloneApp();
+      setIsStandalone(standaloneNow);
+      if (standaloneNow) {
+        setIsPwaInstalled(true);
+        setShowPwaModal(false);
+      }
+    };
+    syncStandaloneStatus();
 
     const onBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
@@ -200,15 +213,34 @@ export default function App() {
     };
     const onAppInstalled = () => {
       setIsPwaInstalled(true);
+      setIsStandalone(isStandaloneApp());
       setDeferredPrompt(null);
+      setShowPwaModal(false);
+    };
+    const onFullscreenChange = () => {
+      setIsFullscreen(Boolean(document.fullscreenElement));
     };
 
     window.addEventListener('beforeinstallprompt', onBeforeInstallPrompt);
     window.addEventListener('appinstalled', onAppInstalled);
+    document.addEventListener('fullscreenchange', onFullscreenChange);
     return () => {
       window.removeEventListener('beforeinstallprompt', onBeforeInstallPrompt);
       window.removeEventListener('appinstalled', onAppInstalled);
+      document.removeEventListener('fullscreenchange', onFullscreenChange);
     };
+  }, []);
+
+  const handleToggleFullscreen = useCallback(() => {
+    try {
+      if (!document.fullscreenElement) {
+        void document.documentElement.requestFullscreen?.();
+      } else {
+        void document.exitFullscreen?.();
+      }
+    } catch {
+      // Ignore fullscreen permission errors in restricted contexts
+    }
   }, []);
 
   const handleTriggerInstallPrompt = useCallback(async (): Promise<boolean> => {
@@ -342,6 +374,16 @@ export default function App() {
     const res = restockWholesaleIngredients(gameStateRef.current);
     if (res.restocked) {
       soundEngine.playServeSuccess();
+    } else {
+      soundEngine.playStep();
+    }
+    syncHudNow();
+  }, [syncHudNow]);
+
+  const handleToggleAutoRestock = useCallback(() => {
+    const enabled = toggleWholesaleAutoRestock(gameStateRef.current);
+    if (enabled) {
+      soundEngine.playStepReady();
     } else {
       soundEngine.playStep();
     }
@@ -1236,6 +1278,9 @@ export default function App() {
         <TopHudBar
           hud={hud}
           dockCollapsed={dockCollapsed}
+          isStandalone={isStandalone}
+          isFullscreen={isFullscreen}
+          onToggleFullscreen={handleToggleFullscreen}
           onToggleDock={() => setDockCollapsed((prev) => !prev)}
           onToggleBgm={() => {
             soundEngine.toggleBgm();
@@ -1338,6 +1383,7 @@ export default function App() {
           onStart={handleStartGame}
           onOpenCustomize={() => setShowCustomizeModal(true)}
           onInstallApp={handleOpenInstallOrApkModal}
+          isStandalone={isStandalone}
         />
       )}
 
@@ -1370,6 +1416,7 @@ export default function App() {
           decorOwned={hud.decorOwned}
           decorEquipped={hud.decorEquipped}
           onRestockWholesale={handleRestockWholesale}
+          onToggleAutoRestock={handleToggleAutoRestock}
           onHireStaffById={handleHireStaffById}
           onUpgradeStation={handleUpgradeStation}
           onPurchaseOrToggleDecor={handlePurchaseOrToggleDecor}
@@ -1379,8 +1426,8 @@ export default function App() {
         />
       )}
 
-      {/* Offline PWA & Android .APK Export Modal ([📲 APP / APK]) */}
-      {showPwaModal && (
+      {/* Offline PWA & Android .APK Export Modal ([📲 APP / APK]) — Hidden in Standalone App Mode */}
+      {!isStandalone && showPwaModal && (
         <PwaApkModal
           isInstallable={Boolean(deferredPrompt)}
           isInstalled={isPwaInstalled}
